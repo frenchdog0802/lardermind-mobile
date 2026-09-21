@@ -1,18 +1,21 @@
 /**
- * Login / SignUp screen smoke tests after Auth0 removal
+ * Login / SignUp screen smoke tests — email + Android Google CTA
  */
 import React from 'react';
+import { Platform } from 'react-native';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import LoginScreen from '../../screens/LoginScreen';
 import SignUpScreen from '../../screens/SignUpScreen';
 
 const mockLogin = jest.fn();
 const mockSignUp = jest.fn();
+const mockLoginWithGoogle = jest.fn();
 
 jest.mock('../../contexts/authContext', () => ({
     useAuth: () => ({
         login: mockLogin,
         signUp: mockSignUp,
+        loginWithGoogle: mockLoginWithGoogle,
         initializing: false,
         submitting: false,
         loading: false,
@@ -23,12 +26,21 @@ jest.mock('../../contexts/authContext', () => ({
 }));
 
 describe('LoginScreen', () => {
+    const platformOS = Platform.OS;
+
     beforeEach(() => {
         jest.clearAllMocks();
+        Object.defineProperty(Platform, 'OS', { configurable: true, get: () => 'ios' });
     });
 
-    it('shows email login UI without social SSO buttons', () => {
-        const { getByText, getByPlaceholderText, queryByText } = render(<LoginScreen />);
+    afterAll(() => {
+        Object.defineProperty(Platform, 'OS', { configurable: true, get: () => platformOS });
+    });
+
+    it('shows email login UI without social SSO buttons on iOS', () => {
+        const { getByText, getByPlaceholderText, queryByText, queryByTestId } = render(
+            <LoginScreen />,
+        );
 
         expect(getByText('LarderMind')).toBeTruthy();
         expect(getByText('Sign in with email')).toBeTruthy();
@@ -37,9 +49,23 @@ describe('LoginScreen', () => {
         expect(getByText('Sign in')).toBeTruthy();
         expect(getByText('Sign up')).toBeTruthy();
 
-        expect(queryByText('Continue with Google')).toBeNull();
+        expect(queryByText('Sign in with Google')).toBeNull();
+        expect(queryByTestId('login-google')).toBeNull();
         expect(queryByText('Continue with Apple')).toBeNull();
-        expect(queryByText(/or sign in with email/i)).toBeNull();
+    });
+
+    it('shows Google button on Android and calls loginWithGoogle', async () => {
+        Object.defineProperty(Platform, 'OS', { configurable: true, get: () => 'android' });
+        mockLoginWithGoogle.mockResolvedValue({ success: true });
+
+        const { getByText, getByTestId } = render(<LoginScreen />);
+
+        expect(getByText('Sign in with Google')).toBeTruthy();
+        fireEvent.press(getByTestId('login-google'));
+
+        await waitFor(() => {
+            expect(mockLoginWithGoogle).toHaveBeenCalled();
+        });
     });
 
     it('calls login with email and password', async () => {
@@ -64,12 +90,21 @@ describe('LoginScreen', () => {
 });
 
 describe('SignUpScreen', () => {
+    const platformOS = Platform.OS;
+
     beforeEach(() => {
         jest.clearAllMocks();
+        Object.defineProperty(Platform, 'OS', { configurable: true, get: () => 'ios' });
     });
 
-    it('shows email signup UI without Google button', () => {
-        const { getByText, getByPlaceholderText, queryByText } = render(<SignUpScreen />);
+    afterAll(() => {
+        Object.defineProperty(Platform, 'OS', { configurable: true, get: () => platformOS });
+    });
+
+    it('shows email signup UI without Google button on iOS', () => {
+        const { getByText, getByPlaceholderText, queryByText, queryByTestId } = render(
+            <SignUpScreen />,
+        );
 
         expect(getByText('LarderMind')).toBeTruthy();
         expect(getByText('Create your account with email')).toBeTruthy();
@@ -80,7 +115,22 @@ describe('SignUpScreen', () => {
         expect(getByText('Log in')).toBeTruthy();
 
         expect(queryByText('Sign up with Google')).toBeNull();
+        expect(queryByTestId('signup-google')).toBeNull();
         expect(queryByText(/^or$/)).toBeNull();
+    });
+
+    it('shows Google button on Android and calls loginWithGoogle', async () => {
+        Object.defineProperty(Platform, 'OS', { configurable: true, get: () => 'android' });
+        mockLoginWithGoogle.mockResolvedValue({ success: true });
+
+        const { getByText, getByTestId } = render(<SignUpScreen />);
+
+        expect(getByText('Sign up with Google')).toBeTruthy();
+        fireEvent.press(getByTestId('signup-google'));
+
+        await waitFor(() => {
+            expect(mockLoginWithGoogle).toHaveBeenCalled();
+        });
     });
 
     it('validates password confirmation', () => {

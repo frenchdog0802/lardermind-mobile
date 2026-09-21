@@ -1,16 +1,20 @@
-import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
     View,
     Text,
     TouchableOpacity,
     TextInput,
+    Alert,
+    ActivityIndicator,
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useTranslation } from 'react-i18next';
+import { useNavigation } from '@react-navigation/native';
 import {
     PlusIcon,
     SearchIcon,
     PackageIcon,
+    CameraIcon,
 } from 'lucide-react-native';
 import { usePantry } from '../contexts/pantryContext';
 import useSearchIngredients from '../hooks/useSearchIngredient';
@@ -22,9 +26,12 @@ import { SkeletonList } from '../components/ui/Skeleton';
 import type { MeasurementSystem } from '../utils/units';
 import { colors } from '../theme/tokens';
 import { DRAW_DISTANCE } from '../constants/listPerf';
+import { pickPantryImage } from '../utils/pantryImagePick';
+import { pantryVisionApi } from '../api/pantryVision';
 
 export default function PantryInventoryScreen() {
     const { t } = useTranslation();
+    const navigation = useNavigation();
     const {
         pantryItems: oriPantryItems,
         updatePantryItem,
@@ -50,6 +57,7 @@ export default function PantryInventoryScreen() {
     });
     const [showDropdown, setShowDropdown] = useState(false);
     const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+    const [recognizing, setRecognizing] = useState(false);
 
     useEffect(() => {
         void (async () => {
@@ -106,6 +114,39 @@ export default function PantryInventoryScreen() {
         void removePantryItem(id);
     }, [removePantryItem]);
 
+    const handleScan = useCallback(async () => {
+        if (recognizing) return;
+        const picked = await pickPantryImage(t);
+        if (!picked) return;
+        setRecognizing(true);
+        try {
+            const res = await pantryVisionApi.recognize(picked.uri);
+            if (!res.success || !res.data) {
+                Alert.alert(
+                    t('pantryVision.errorTitle'),
+                    res.message || t('pantryVision.errorRecognize'),
+                );
+                return;
+            }
+            navigation.navigate({
+                name: 'PantryImageReview',
+                params: {
+                    items: res.data.items ?? [],
+                    imageUri: picked.uri,
+                    source: 'pantry',
+                    emptyMessage: res.data.message || undefined,
+                },
+            } as never);
+        } catch {
+            Alert.alert(
+                t('pantryVision.errorTitle'),
+                t('pantryVision.errorRecognize'),
+            );
+        } finally {
+            setRecognizing(false);
+        }
+    }, [recognizing, t, navigation]);
+
     const renderItem = useCallback(({ item }: { item: PantryItem }) => (
         <PantryItemRow
             item={item}
@@ -128,13 +169,29 @@ export default function PantryInventoryScreen() {
             </View>
 
             {!isAddingItem ? (
-                <TouchableOpacity
-                    onPress={() => setIsAddingItem(true)}
-                    className="bg-surface border border-line rounded-xl p-4 flex-row justify-center items-center mb-4"
-                >
-                    <PlusIcon size={18} color={colors.ink} />
-                    <Text className="ml-2 font-medium text-ink">Add New Item</Text>
-                </TouchableOpacity>
+                <View className="flex-row gap-2 mb-4">
+                    <TouchableOpacity
+                        onPress={() => setIsAddingItem(true)}
+                        className="flex-1 bg-surface border border-line rounded-xl p-4 flex-row justify-center items-center"
+                    >
+                        <PlusIcon size={18} color={colors.ink} />
+                        <Text className="ml-2 font-medium text-ink">{t('pantry.addItem')}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        onPress={() => {
+                            void handleScan();
+                        }}
+                        disabled={recognizing}
+                        accessibilityLabel={t('pantryVision.scan')}
+                        className="bg-herb rounded-xl px-4 flex-row justify-center items-center"
+                    >
+                        {recognizing ? (
+                            <ActivityIndicator color={colors.onHerb} />
+                        ) : (
+                            <CameraIcon size={20} color={colors.onHerb} />
+                        )}
+                    </TouchableOpacity>
+                </View>
             ) : (
                 <View className="bg-surface rounded-xl p-4 mb-4 border border-line">
                     <TextInput
@@ -214,6 +271,9 @@ export default function PantryInventoryScreen() {
         ingredients,
         measurementSystem,
         handleAddItem,
+        recognizing,
+        handleScan,
+        t,
     ]);
 
     const listEmpty = useMemo(() => (

@@ -195,6 +195,28 @@
     "unit": "單位",
     "expiry": "有效期限"
   },
+  "pantryVision": {
+    "scan": "掃描食材",
+    "attach": "用照片加入庫存",
+    "takePhoto": "拍照",
+    "chooseLibrary": "從相簿選擇",
+    "pickSource": "用照片加入食材",
+    "reviewTitle": "確認項目",
+    "confirm": "加入庫存",
+    "cancel": "取消",
+    "approxHint": "數量為大約估計，加入前可編輯。",
+    "empty": "未辨識到食材，請換一張照片試試。",
+    "category": "種類",
+    "name": "品項名稱",
+    "successTitle": "庫存已更新",
+    "successBody": "已將 {{count}} 項加入庫存。",
+    "errorTitle": "辨識失敗",
+    "errorRecognize": "圖片辨識失敗，請再試一次。",
+    "errorApply": "無法更新庫存，請再試一次。",
+    "permissionTitle": "需要權限",
+    "permissionCamera": "請允許相機權限以拍攝食材。",
+    "permissionLibrary": "請允許相簿權限以選擇食材照片。"
+  },
   "shopping": {
     "title": "購物清單",
     "searchPlaceholder": "搜尋購物項目...",
@@ -240,8 +262,8 @@
     "instructions": "作法",
     "preferencesSaved": "偏好已儲存",
     "mealSuggestions": "餐點建議",
-    "placeholder": "詢問烹飪、菜單或食譜...",
-    "welcome": "嗨！告訴我你需要什麼 - 匯入食譜網址、規劃本週菜單、更新冰箱庫存，或問我能煮什麼。我會幫你處理並顯示變更。",
+    "placeholder": "問我任何事...",
+    "welcome": "點選下方建議，或直接輸入你想做的事。",
     "greetingMorning": "早安",
     "greetingAfternoon": "午安",
     "greetingEvening": "晚安",
@@ -264,12 +286,10 @@
     "suggestedPrompts": [
       "我現有的食材可以煮什麼？",
       "幫我規劃這週剩下的晚餐",
-      "從網址匯入一道食譜",
-      "從 YouTube 或 Instagram 連結匯入食譜",
-      "把雞胸肉、米和花椰菜加入冰箱",
-      "整理我的冰箱庫存"
+      "從網址匯入食譜（網站、YouTube 或 Instagram）",
+      "把雞胸肉、米和花椰菜加入冰箱"
     ],
-    "demoWelcome": "嗨！告訴我你需要什麼 - 用冰箱裡的東西規劃晚餐、匯入食譜，或問我能煮什麼。試試下面的提示。",
+    "demoWelcome": "試試下方提示，或自己輸入。",
     "demoSuggestedPrompts": [
       "我現有的食材可以煮什麼？",
       "幫我規劃這週剩下的晚餐",

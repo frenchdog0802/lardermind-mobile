@@ -4,6 +4,7 @@ import { auth } from '../api/api-auth';
 import { authHelper, isJwtExpired } from '../api/auth-helper';
 import { setUnauthorizedHandler } from '../api/client';
 import { User } from '../types';
+import { GoogleSignInError, signInForIdToken } from '../services/googleSignIn';
 
 import { clearUserOfflineData, clearBackoff } from '../services/shoppingListOffline';
 
@@ -22,6 +23,7 @@ interface AuthContextType {
     loading: boolean;
     signUp: (user: User, password: string) => Promise<AuthResponse>;
     login: (email: string, password: string) => Promise<AuthResponse>;
+    loginWithGoogle: () => Promise<AuthResponse>;
     logout: () => Promise<void>;
     isAuthenticated: boolean;
 }
@@ -88,6 +90,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         void checkAuth();
     }, []);
 
+    const persistSession = async (token: string, nextUser: User): Promise<void> => {
+        await authHelper.authenticate(token);
+        setUser(nextUser);
+        await AsyncStorage.setItem('user', JSON.stringify(nextUser));
+    };
+
     const signUp = async (userData: User, password: string): Promise<AuthResponse> => {
         setSubmitting(true);
         const authResponse: AuthResponse = { success: false };
@@ -102,10 +110,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
 
             if (response && response.success && response.data) {
-                const createdUser = response.data.user;
-                setUser(createdUser);
-                await AsyncStorage.setItem('user', JSON.stringify(createdUser));
-                await authHelper.authenticate(response.data.token);
+                await persistSession(response.data.token, response.data.user);
                 authResponse.success = true;
             } else {
                 authResponse.success = false;
@@ -135,9 +140,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
 
             if (response && response.data && response.success) {
-                await authHelper.authenticate(response.data.token);
-                setUser(response.data.user);
-                await AsyncStorage.setItem('user', JSON.stringify(response.data.user));
+                await persistSession(response.data.token, response.data.user);
                 authResponse.success = true;
             } else {
                 authResponse.success = false;
@@ -153,6 +156,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return authResponse;
     };
 
+    const loginWithGoogle = async (): Promise<AuthResponse> => {
+        setSubmitting(true);
+        const authResponse: AuthResponse = { success: false };
+
+        try {
+            const idToken = await signInForIdToken();
+            if (__DEV__) {
+                console.log('[auth] google login start');
+            }
+            const response = await auth.googleLogin(idToken);
+            if (__DEV__) {
+                console.log('[auth] google login response', response?.success, response?.message);
+            }
+
+            if (response && response.success && response.data) {
+                await persistSession(response.data.token, response.data.user);
+                authResponse.success = true;
+            } else {
+                authResponse.success = false;
+                authResponse.message = response.message || 'Google login failed';
+            }
+        } catch (error) {
+            if (error instanceof GoogleSignInError && error.code === 'cancelled') {
+                authResponse.message = 'cancelled';
+            } else if (error instanceof GoogleSignInError) {
+                console.error('Google sign-in error:', error.code, error.message);
+                authResponse.message = error.message;
+            } else {
+                console.error('Error during Google login:', error);
+                authResponse.message = 'An error occurred during Google login';
+            }
+        } finally {
+            setSubmitting(false);
+        }
+
+        return authResponse;
+    };
+
     const value = useMemo(
         () => ({
             user,
@@ -160,6 +201,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             submitting,
             loading: initializing,
             login,
+            loginWithGoogle,
             logout,
             isAuthenticated: !!user,
             signUp,

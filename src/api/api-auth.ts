@@ -1,5 +1,5 @@
 /**
- * Authentication API — email/password only
+ * Authentication API — email/password + Google ID token login
  */
 import { api } from './client';
 import { ApiResponse, User } from '../types';
@@ -16,5 +16,10 @@ export const auth = {
 
     signup: (user: User, password: string): Promise<ApiResponse<AuthData>> => {
         return api.post<AuthData>('auth/signup', { ...user, password });
+    },
+
+    /** Exchange Google ID token for app JWT (Worker: POST /api/auth/google-login). */
+    googleLogin: (idToken: string): Promise<ApiResponse<AuthData>> => {
+        return api.post<AuthData>('auth/google-login', { token: idToken });
     },
 };

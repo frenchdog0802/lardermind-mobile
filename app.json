@@ -17,7 +17,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.lardermind.app",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "LarderMind uses the camera to photograph groceries for your pantry.",
+        "NSPhotoLibraryUsageDescription": "LarderMind uses your photo library to add groceries to your pantry."
       }
     },
     "android": {
@@ -27,7 +29,11 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.lardermind.app"
+      "package": "com.lardermind.app",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -45,7 +51,15 @@
           "embeddedBundle": true
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "@react-native-google-signin/google-signin",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow LarderMind to access your photos to add groceries to your pantry.",
+          "cameraPermission": "Allow LarderMind to use the camera to photograph groceries for your pantry."
+        }
+      ]
     ],
     "extra": {
       "eas": {

@@ -21,7 +21,7 @@ if (!fs.existsSync(apkPath)) {
   process.exit(1);
 }
 
-const extractDir = path.join(require('os').tmpdir(), 'cookcopilot-apk-check');
+const extractDir = path.join(require('os').tmpdir(), 'lardermind-apk-check');
 fs.mkdirSync(extractDir, { recursive: true });
 const bundlePath = path.join(extractDir, 'assets', 'index.android.bundle');
 

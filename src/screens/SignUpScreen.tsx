@@ -6,13 +6,13 @@ import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../contexts/authContext';
 import { User } from '../types';
-import { PrimaryButton, TextField } from '../components/ui';
+import { PrimaryButton, GoogleSignInButton, TextField } from '../components/ui';
 import { colors } from '../theme/tokens';
 
 export default function SignUpScreen() {
   const { t } = useTranslation();
   const navigation = useNavigation();
-  const { signUp, submitting } = useAuth();
+  const { signUp, loginWithGoogle, submitting } = useAuth();
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -20,6 +20,7 @@ export default function SignUpScreen() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
+  const showGoogle = Platform.OS === 'android';
 
   const handleSubmit = async () => {
     if (!firstName || !lastName || !email || !password) {
@@ -54,6 +55,23 @@ export default function SignUpScreen() {
       }
     } catch {
       setError(t('auth.genericError'));
+    }
+  };
+
+  const handleGoogle = async () => {
+    setError('');
+    try {
+      const result = await loginWithGoogle();
+      if (result.success) {
+        return;
+      }
+      if (result.message === 'cancelled') {
+        setError(t('auth.googleSignUpCancelled'));
+      } else {
+        setError(result.message || t('auth.googleSignUpRetry'));
+      }
+    } catch {
+      setError(t('auth.googleSignUpRetry'));
     }
   };
 
@@ -147,6 +165,23 @@ export default function SignUpScreen() {
                 disabled={submitting}
                 className="mb-6"
               />
+
+              {showGoogle ? (
+                <>
+                  <View className="flex-row items-center mb-6">
+                    <View className="flex-1 h-px bg-line" />
+                    <Text className="mx-3 text-sm text-muted">{t('common.or')}</Text>
+                    <View className="flex-1 h-px bg-line" />
+                  </View>
+                  <GoogleSignInButton
+                    label={t('auth.signUpGoogle')}
+                    onPress={handleGoogle}
+                    disabled={submitting}
+                    className="mb-6"
+                    testID="signup-google"
+                  />
+                </>
+              ) : null}
 
               <View className="items-center">
                 <Text className="text-sm text-muted">

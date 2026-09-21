@@ -195,6 +195,28 @@
     "unit": "Unit",
     "expiry": "Expiry"
   },
+  "pantryVision": {
+    "scan": "Scan groceries",
+    "attach": "Add pantry items from photo",
+    "takePhoto": "Take photo",
+    "chooseLibrary": "Choose from library",
+    "pickSource": "Add ingredients from a photo",
+    "reviewTitle": "Review items",
+    "confirm": "Add to pantry",
+    "cancel": "Cancel",
+    "approxHint": "Quantities are approximate — edit before adding.",
+    "empty": "No food items recognized. Try another photo.",
+    "category": "Category",
+    "name": "Ingredient name",
+    "successTitle": "Pantry updated",
+    "successBody": "Added {{count}} item(s) to your pantry.",
+    "errorTitle": "Couldn't recognize",
+    "errorRecognize": "Image recognition failed. Please try again.",
+    "errorApply": "Couldn't update pantry. Please try again.",
+    "permissionTitle": "Permission needed",
+    "permissionCamera": "Allow camera access to photograph groceries.",
+    "permissionLibrary": "Allow photo library access to pick a grocery image."
+  },
   "shopping": {
     "title": "Shopping List",
     "searchPlaceholder": "Search shopping items...",
@@ -240,8 +262,8 @@
     "instructions": "Instructions",
     "preferencesSaved": "Preferences saved",
     "mealSuggestions": "Meal suggestions",
-    "placeholder": "Ask about cooking, meal plans, or recipes...",
-    "welcome": "Hi! Tell me what you need - import a recipe URL, plan your week, update your pantry, or ask what you can cook. I'll handle it and show you what changed.",
+    "placeholder": "Ask anything...",
+    "welcome": "Pick a suggestion below, or just type what you need.",
     "greetingMorning": "Good morning",
     "greetingAfternoon": "Good afternoon",
     "greetingEvening": "Good evening",
@@ -264,12 +286,10 @@
     "suggestedPrompts": [
       "What can I cook with what I have?",
       "Plan dinners for the rest of this week",
-      "Import a recipe from a URL",
-      "Import a recipe from a YouTube or Instagram link",
-      "Add chicken, rice, and broccoli to my pantry",
-      "Organize my pantry"
+      "Import a recipe from a URL (website, YouTube, or Instagram)",
+      "Add chicken, rice, and broccoli to my pantry"
     ],
-    "demoWelcome": "Hi! Tell me what you need - plan dinner from your pantry, import a recipe, or ask what you can cook. Try a prompt below.",
+    "demoWelcome": "Try a prompt below, or type your own.",
     "demoSuggestedPrompts": [
       "What can I cook with what I have?",
       "Plan dinners for the rest of this week",

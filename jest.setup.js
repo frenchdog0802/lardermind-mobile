@@ -133,15 +133,35 @@ jest.mock('@react-navigation/native', () => ({
 
 jest.mock('lucide-react-native', () => new Proxy({}, { get: () => () => null }));
 
+jest.mock('@react-native-google-signin/google-signin', () => ({
+    GoogleSignin: {
+        configure: jest.fn(),
+        hasPlayServices: jest.fn(async () => true),
+        signIn: jest.fn(async () => ({ type: 'cancelled', data: null })),
+        signOut: jest.fn(async () => null),
+    },
+    statusCodes: {
+        SIGN_IN_CANCELLED: 'SIGN_IN_CANCELLED',
+        IN_PROGRESS: 'IN_PROGRESS',
+        PLAY_SERVICES_NOT_AVAILABLE: 'PLAY_SERVICES_NOT_AVAILABLE',
+    },
+    isSuccessResponse: (r) => r?.type === 'success',
+    isCancelledResponse: (r) => r?.type === 'cancelled',
+    isErrorWithCode: (e) => Boolean(e && typeof e === 'object' && 'code' in e),
+}));
+
 jest.mock('react-i18next', () => ({
     useTranslation: () => ({
         t: (key, opts) => {
             const map = {
                 'common.loading': 'Loading...',
+                'common.or': 'or',
                 'auth.signInTitle': 'Sign in with email',
                 'auth.signUpTitle': 'Create your account with email',
                 'auth.signIn': 'Sign in',
                 'auth.signUp': 'Sign up',
+                'auth.signInGoogle': 'Sign in with Google',
+                'auth.signUpGoogle': 'Sign up with Google',
                 'auth.logIn': 'Log in',
                 'auth.email': 'Email',
                 'auth.password': 'Password',
@@ -153,6 +173,10 @@ jest.mock('react-i18next', () => ({
                 'auth.noAccount': "Don't have an account?",
                 'auth.haveAccount': 'Already have an account?',
                 'auth.rememberMe': 'Remember me',
+                'auth.googleCancelled': 'Google login was cancelled or failed.',
+                'auth.googleRetry': 'Google login failed. Please try again.',
+                'auth.googleSignUpCancelled': 'Google sign up was cancelled or failed.',
+                'auth.googleSignUpRetry': 'Google sign up failed. Please try again.',
                 'nav.home': 'Home',
                 'nav.calendar': 'Calendar',
                 'nav.pantry': 'Pantry',

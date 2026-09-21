@@ -42,7 +42,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<ApiR
     }
 
     const headers = new Headers(options.headers);
-    if (options.body !== undefined && !headers.has('Content-Type')) {
+    const isFormData =
+        typeof FormData !== 'undefined' && options.body instanceof FormData;
+    if (
+        options.body !== undefined &&
+        !headers.has('Content-Type') &&
+        !isFormData
+    ) {
         headers.set('Content-Type', 'application/json');
     }
     if (!headers.has('Accept')) {
@@ -110,6 +116,15 @@ export const api = {
     get: <T>(path: string) => request<T>(path),
     post: <T>(path: string, body?: unknown) =>
         request<T>(path, { method: 'POST', body: JSON.stringify(body ?? {}) }),
+    postForm: <T>(path: string, formData: FormData) =>
+        request<T>(path, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                // Let fetch set multipart boundary; do not force JSON.
+                Accept: 'application/json',
+            },
+        }),
     put: <T>(path: string, body?: unknown) =>
         request<T>(path, { method: 'PUT', body: JSON.stringify(body ?? {}) }),
     patch: <T>(path: string, body?: unknown) =>

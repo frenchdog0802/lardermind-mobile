@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../contexts/authContext';
 import { usePantry } from '../../contexts/pantryContext';
@@ -8,9 +8,15 @@ import { greetingPeriodNow } from '../../utils/chatGreeting';
 interface ChatEmptyStateProps {
   /** Override clock for tests */
   now?: Date;
+  suggestedPrompts?: string[];
+  onSelectPrompt?: (prompt: string) => void;
 }
 
-export default function ChatEmptyState({ now }: ChatEmptyStateProps) {
+export default function ChatEmptyState({
+  now,
+  suggestedPrompts = [],
+  onSelectPrompt,
+}: ChatEmptyStateProps) {
   const { t } = useTranslation();
   const { user } = useAuth();
   const { pantryItems, shoppingList } = usePantry();
@@ -43,10 +49,25 @@ export default function ChatEmptyState({ now }: ChatEmptyStateProps) {
         <Text className="font-display text-lg text-ink text-center mb-3">{periodGreeting}</Text>
       ) : null}
       <Text className="text-muted text-center text-base mb-6">{t('ai.welcome')}</Text>
-      <View className="items-center gap-1">
+      <View className="items-center gap-1 mb-8">
         <Text className="text-sm text-muted">{t('home.pantryCount', { count: pantryCount })}</Text>
         <Text className="text-sm text-muted">{t('home.buyCount', { count: buyCount })}</Text>
       </View>
+      {suggestedPrompts.length > 0 && onSelectPrompt ? (
+        <View className="w-full max-w-sm gap-2" testID="chat-empty-suggestions">
+          {suggestedPrompts.map((prompt) => (
+            <TouchableOpacity
+              key={prompt}
+              onPress={() => onSelectPrompt(prompt)}
+              className="bg-sage px-4 py-3 rounded-full border border-line"
+              accessibilityRole="button"
+              accessibilityLabel={prompt}
+            >
+              <Text className="text-herb-deep text-sm text-center">{prompt}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }

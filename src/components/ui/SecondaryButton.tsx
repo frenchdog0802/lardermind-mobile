@@ -6,6 +6,7 @@ type SecondaryButtonProps = {
   onPress: (event: GestureResponderEvent) => void;
   disabled?: boolean;
   className?: string;
+  testID?: string;
 };
 
 export function SecondaryButton({
@@ -13,9 +14,11 @@ export function SecondaryButton({
   onPress,
   disabled = false,
   className = '',
+  testID,
 }: SecondaryButtonProps) {
   return (
     <TouchableOpacity
+      testID={testID}
       onPress={onPress}
       disabled={disabled}
       activeOpacity={0.85}

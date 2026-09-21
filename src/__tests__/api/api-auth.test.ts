@@ -66,4 +66,19 @@ describe('auth API', () => {
             });
         });
     });
+
+    describe('googleLogin', () => {
+        it('should POST to /auth/google-login with Google ID token', async () => {
+            mockedApi.post.mockResolvedValue({
+                success: true,
+                data: { user: { id: '1', name: 'G', email: 'g@test.com' }, token: 'jwt' },
+            });
+
+            await auth.googleLogin('google-id-token');
+
+            expect(mockedApi.post).toHaveBeenCalledWith('auth/google-login', {
+                token: 'google-id-token',
+            });
+        });
+    });
 });

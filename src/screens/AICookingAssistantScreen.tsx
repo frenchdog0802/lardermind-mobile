@@ -4,18 +4,19 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    ScrollView,
     KeyboardAvoidingView,
     Platform,
     Alert,
     NativeSyntheticEvent,
     TextInputContentSizeChangeEventData,
+    ActivityIndicator,
 } from 'react-native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useTranslation } from 'react-i18next';
 import {
     SendIcon,
     RefreshCwIcon,
+    PaperclipIcon,
 } from 'lucide-react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -28,10 +29,13 @@ import { mealPlanApi } from '../api/mealPlan';
 import { colors } from '../theme/tokens';
 import { SkeletonList } from '../components/ui/Skeleton';
 import { DRAW_DISTANCE } from '../constants/listPerf';
+import { pickPantryImage } from '../utils/pantryImagePick';
+import { pantryVisionApi } from '../api/pantryVision';
 
-/** Matches ChatGPT / Claude-style mobile composers: comfortable single line, grows with content. */
-const INPUT_MIN_HEIGHT = 44;
-const INPUT_MAX_HEIGHT = 140;
+/** ChatGPT / Claude-style composer: one-line resting height, grows with content. */
+const INPUT_LINE_HEIGHT = 22;
+const INPUT_MIN_HEIGHT = 22;
+const INPUT_MAX_HEIGHT = 100;
 
 type ChatScreenParams = {
   Chat?: {
@@ -99,6 +103,8 @@ export default function AICookingAssistantScreen() {
         pendingTools: PendingToolSummary[];
     } | null>(null);
     const [headerHeight, setHeaderHeight] = useState(88);
+    const [recognizing, setRecognizing] = useState(false);
+    const [composerFocused, setComposerFocused] = useState(false);
 
     const canSend = input.trim().length > 0 && !isTyping && !pendingApproval;
     const isEmptyChat = messages.length === 0;
@@ -120,10 +126,45 @@ export default function AICookingAssistantScreen() {
     ) => {
         const next = Math.min(
             INPUT_MAX_HEIGHT,
-            Math.max(INPUT_MIN_HEIGHT, event.nativeEvent.contentSize.height),
+            Math.max(INPUT_MIN_HEIGHT, Math.ceil(event.nativeEvent.contentSize.height)),
         );
         setInputHeight(next);
     };
+
+    const isMultilineInput = inputHeight > INPUT_LINE_HEIGHT + 4;
+
+    const handleAttachPantryImage = useCallback(async () => {
+        if (recognizing || isTyping) return;
+        const picked = await pickPantryImage(t);
+        if (!picked) return;
+        setRecognizing(true);
+        try {
+            const res = await pantryVisionApi.recognize(picked.uri);
+            if (!res.success || !res.data) {
+                Alert.alert(
+                    t('pantryVision.errorTitle'),
+                    res.message || t('pantryVision.errorRecognize'),
+                );
+                return;
+            }
+            navigation.navigate({
+                name: 'PantryImageReview',
+                params: {
+                    items: res.data.items ?? [],
+                    imageUri: picked.uri,
+                    source: 'chat',
+                    emptyMessage: res.data.message || undefined,
+                },
+            } as never);
+        } catch {
+            Alert.alert(
+                t('pantryVision.errorTitle'),
+                t('pantryVision.errorRecognize'),
+            );
+        } finally {
+            setRecognizing(false);
+        }
+    }, [recognizing, isTyping, t, navigation]);
 
     useEffect(() => {
         const bootstrap = async () => {
@@ -585,7 +626,10 @@ export default function AICookingAssistantScreen() {
                         <SkeletonList count={4} />
                     </View>
                 ) : isEmptyChat ? (
-                    <ChatEmptyState />
+                    <ChatEmptyState
+                        suggestedPrompts={suggestedPrompts}
+                        onSelectPrompt={setInput}
+                    />
                 ) : (
                     <FlashList
                         ref={flatListRef}
@@ -614,64 +658,80 @@ export default function AICookingAssistantScreen() {
                 )}
 
                 <View
-                    className="bg-surface border-t border-line px-3 pt-3"
+                    className="bg-linen px-3 pt-2"
                     style={{ paddingBottom: Math.max(insets.bottom, 12) }}
                 >
-                    <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        className="mb-3"
-                        keyboardShouldPersistTaps="handled"
-                        contentContainerStyle={{ paddingHorizontal: 2 }}
+                    {/* Elevated surface field on linen — clear figure-ground */}
+                    <View
+                        className={`flex-row rounded-[22px] border bg-surface px-1 py-1 ${
+                            isMultilineInput ? 'items-end' : 'items-center'
+                        }`}
+                        style={{
+                            borderColor: composerFocused ? colors.herb : colors.line,
+                            borderWidth: 1.5,
+                            shadowColor: colors.ink,
+                            shadowOffset: { width: 0, height: 2 },
+                            shadowOpacity: 0.08,
+                            shadowRadius: 8,
+                            elevation: 2,
+                            minHeight: 48,
+                        }}
                     >
-                        {suggestedPrompts.map((prompt) => (
-                            <TouchableOpacity
-                                key={prompt}
-                                onPress={() => setInput(prompt)}
-                                className="bg-sage px-3.5 py-2 rounded-full mr-2 border border-line"
-                            >
-                                <Text className="text-herb-deep text-sm">{prompt}</Text>
-                            </TouchableOpacity>
-                        ))}
-                    </ScrollView>
-
-                    {/* ChatGPT / Claude-style pill composer */}
-                    <View className="flex-row items-end gap-2.5">
-                        <View className="flex-1 flex-row items-end rounded-[28px] border border-line bg-linen pl-4 pr-2 py-2 min-h-[56px]">
-                            <TextInput
-                                className="flex-1 text-ink"
-                                style={{
-                                    fontSize: 16,
-                                    lineHeight: 22,
-                                    maxHeight: INPUT_MAX_HEIGHT,
-                                    height: Math.max(inputHeight, INPUT_MIN_HEIGHT),
-                                    paddingTop: Platform.OS === 'ios' ? 10 : 8,
-                                    paddingBottom: Platform.OS === 'ios' ? 10 : 8,
-                                    marginRight: 8,
-                                }}
-                                placeholder={t('ai.placeholder')}
-                                placeholderTextColor={colors.muted}
-                                value={input}
-                                onChangeText={setInput}
-                                onContentSizeChange={handleInputContentSizeChange}
-                                multiline
-                                textAlignVertical="top"
-                                blurOnSubmit={false}
-                                editable={!isTyping}
-                                returnKeyType="default"
+                        <TouchableOpacity
+                            onPress={() => {
+                                void handleAttachPantryImage();
+                            }}
+                            disabled={recognizing || isTyping}
+                            accessibilityRole="button"
+                            accessibilityLabel={t('pantryVision.attach')}
+                            activeOpacity={0.7}
+                            className="h-10 w-10 rounded-full items-center justify-center"
+                        >
+                            {recognizing ? (
+                                <ActivityIndicator color={colors.herb} />
+                            ) : (
+                                <PaperclipIcon size={20} color={colors.muted} />
+                            )}
+                        </TouchableOpacity>
+                        <TextInput
+                            className="flex-1 text-ink mx-1"
+                            style={{
+                                fontSize: 16,
+                                lineHeight: INPUT_LINE_HEIGHT,
+                                height: inputHeight,
+                                maxHeight: INPUT_MAX_HEIGHT,
+                                paddingTop: 0,
+                                paddingBottom: 0,
+                                margin: 0,
+                                ...(Platform.OS === 'android' ? { textAlignVertical: 'center' } : null),
+                            }}
+                            value={input}
+                            onChangeText={setInput}
+                            onContentSizeChange={handleInputContentSizeChange}
+                            onFocus={() => setComposerFocused(true)}
+                            onBlur={() => setComposerFocused(false)}
+                            multiline
+                            scrollEnabled={inputHeight >= INPUT_MAX_HEIGHT}
+                            blurOnSubmit={false}
+                            editable={!isTyping}
+                            returnKeyType="default"
+                            accessibilityLabel={t('ai.title')}
+                        />
+                        <TouchableOpacity
+                            onPress={handleSend}
+                            disabled={!canSend}
+                            accessibilityRole="button"
+                            accessibilityLabel="Send message"
+                            activeOpacity={0.7}
+                            className={`h-10 w-10 rounded-full items-center justify-center ${
+                                canSend ? 'bg-herb' : 'bg-transparent'
+                            }`}
+                        >
+                            <SendIcon
+                                size={18}
+                                color={canSend ? colors.onHerb : colors.muted}
                             />
-                            <TouchableOpacity
-                                onPress={handleSend}
-                                disabled={!canSend}
-                                accessibilityRole="button"
-                                accessibilityLabel="Send message"
-                                className={`w-11 h-11 rounded-full items-center justify-center mb-0.5 ${
-                                    canSend ? 'bg-herb' : 'bg-sage'
-                                }`}
-                            >
-                                <SendIcon size={20} color={canSend ? colors.onHerb : colors.muted} />
-                            </TouchableOpacity>
-                        </View>
+                        </TouchableOpacity>
                     </View>
                 </View>
             </KeyboardAvoidingView>

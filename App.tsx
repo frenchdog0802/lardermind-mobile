@@ -123,6 +123,11 @@ function MainDrawer() {
         getComponent={() => require('./src/screens/SubscriptionScreen').default}
         options={{ title: t('nav.subscription'), drawerItemStyle: { display: 'none' } }}
       />
+      <Drawer.Screen
+        name="PantryImageReview"
+        getComponent={() => require('./src/screens/PantryImageReviewScreen').default}
+        options={{ title: t('pantryVision.reviewTitle'), drawerItemStyle: { display: 'none' } }}
+      />
     </Drawer.Navigator>
   );
 }

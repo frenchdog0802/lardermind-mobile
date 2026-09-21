@@ -5,7 +5,7 @@ import { ChefHat } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/authContext';
 import { useNavigation } from '@react-navigation/native';
-import { PrimaryButton, TextField } from '../components/ui';
+import { PrimaryButton, GoogleSignInButton, TextField } from '../components/ui';
 import { colors } from '../theme/tokens';
 
 interface LoginProps {
@@ -21,7 +21,8 @@ export default function LoginScreen({ onLoginSuccess, onSignUp }: LoginProps = {
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
 
-  const { login, submitting } = useAuth();
+  const { login, loginWithGoogle, submitting } = useAuth();
+  const showGoogle = Platform.OS === 'android';
 
   const handleSubmit = async () => {
     if (!email || !password) {
@@ -38,6 +39,24 @@ export default function LoginScreen({ onLoginSuccess, onSignUp }: LoginProps = {
       }
     } catch {
       setError(t('auth.genericError'));
+    }
+  };
+
+  const handleGoogle = async () => {
+    setError('');
+    try {
+      const result = await loginWithGoogle();
+      if (result.success) {
+        onLoginSuccess?.();
+        return;
+      }
+      if (result.message === 'cancelled') {
+        setError(t('auth.googleCancelled'));
+      } else {
+        setError(result.message || t('auth.googleRetry'));
+      }
+    } catch {
+      setError(t('auth.googleRetry'));
     }
   };
 
@@ -116,6 +135,23 @@ export default function LoginScreen({ onLoginSuccess, onSignUp }: LoginProps = {
               className="mb-6"
               testID="login-submit"
             />
+
+            {showGoogle ? (
+              <>
+                <View className="flex-row items-center mb-6">
+                  <View className="flex-1 h-px bg-line" />
+                  <Text className="mx-3 text-sm text-muted">{t('common.or')}</Text>
+                  <View className="flex-1 h-px bg-line" />
+                </View>
+                <GoogleSignInButton
+                  label={t('auth.signInGoogle')}
+                  onPress={handleGoogle}
+                  disabled={submitting}
+                  className="mb-6"
+                  testID="login-google"
+                />
+              </>
+            ) : null}
 
             <View className="items-center">
               <Text className="text-sm text-muted">

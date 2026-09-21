@@ -1,3 +1,4 @@
+import { fetch as expoFetch } from 'expo/fetch';
 import { api } from './client';
 import { authHelper } from './auth-helper';
 import { ApiResponse } from '../types';
@@ -241,7 +242,9 @@ export const chatApi = {
             console.log(`[api] POST ${url} (sse)`);
         }
 
-        const response = await fetch(url, {
+        // Expo SDK 54: global fetch is RN's (response.body is often null).
+        // expo/fetch exposes a ReadableStream body required for SSE.
+        const response = await expoFetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
