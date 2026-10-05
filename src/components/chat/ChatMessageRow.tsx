@@ -250,10 +250,6 @@ function ChatMessageRowComponent({
           </View>
         ) : null}
       </View>
-
-      <Text className="text-xs text-muted mt-1 mx-2">
-        {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-      </Text>
     </View>
   );
 }

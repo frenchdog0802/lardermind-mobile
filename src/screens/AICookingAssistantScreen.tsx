@@ -7,6 +7,7 @@ import {
     KeyboardAvoidingView,
     Platform,
     Alert,
+    DeviceEventEmitter,
     NativeSyntheticEvent,
     TextInputContentSizeChangeEventData,
     ActivityIndicator,
@@ -440,6 +441,12 @@ export default function AICookingAssistantScreen() {
                             streaming: false,
                             statusText: undefined,
                         }));
+                    },
+                    onSessionTitle: ({ sessionId, title }) => {
+                        DeviceEventEmitter.emit('lardermind:chat-session-title', {
+                            sessionId,
+                            title,
+                        });
                     },
                 },
             );

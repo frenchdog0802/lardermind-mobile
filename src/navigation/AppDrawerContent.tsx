@@ -4,6 +4,7 @@ import {
   Text,
   TouchableOpacity,
   ActivityIndicator,
+  DeviceEventEmitter,
 } from 'react-native';
 import {
   DrawerContentScrollView,
@@ -75,6 +76,34 @@ export default function AppDrawerContent(props: DrawerContentComponentProps) {
       void refreshSessions();
     }
   }, [drawerStatus, refreshSessions]);
+
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(
+      'lardermind:chat-session-title',
+      (payload: { sessionId?: string; title?: string }) => {
+        const sessionId = payload?.sessionId?.trim();
+        const title = payload?.title?.trim();
+        if (!sessionId || !title) return;
+        setSessions((prev) => {
+          const idx = prev.findIndex((s) => s.id === sessionId);
+          if (idx === -1) {
+            return [
+              {
+                id: sessionId,
+                title,
+                isDefault: false,
+                updatedAt: Math.floor(Date.now() / 1000),
+                createdAt: Math.floor(Date.now() / 1000),
+              },
+              ...prev,
+            ];
+          }
+          return prev.map((s) => (s.id === sessionId ? { ...s, title } : s));
+        });
+      },
+    );
+    return () => sub.remove();
+  }, []);
 
   const go = (route: string, params?: object) => {
     // Drawer screens are registered dynamically; keep navigate loosely typed.
