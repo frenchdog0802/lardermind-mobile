@@ -323,27 +323,6 @@ export default function AICookingAssistantScreen() {
             );
         };
 
-        const showInterruptAlert = (
-            tools: PendingToolSummary[],
-            sessionId: string,
-        ) => {
-            Alert.alert(
-                'Approve changes?',
-                tools.map((t) => t.name).join(', ') || 'Mutating tools pending',
-                [
-                    {
-                        text: 'Reject',
-                        style: 'cancel',
-                        onPress: () => void handleResume('reject', sessionId),
-                    },
-                    {
-                        text: 'Approve',
-                        onPress: () => void handleResume('approve', sessionId),
-                    },
-                ],
-            );
-        };
-
         try {
             await chatApi.streamSend(
                 {
@@ -389,11 +368,9 @@ export default function AICookingAssistantScreen() {
                             streaming: false,
                             statusText: undefined,
                         }));
-                        showInterruptAlert(tools, sessionId);
                     },
                     onDone: async (response) => {
                         if (response.type === 'interrupt') {
-                            // Prefer onInterrupt for Alert; still finalize if interrupt event was missed.
                             if (settled) return;
                             const tools =
                                 (response.data?.pendingTools as PendingToolSummary[] | undefined) ??
@@ -412,7 +389,6 @@ export default function AICookingAssistantScreen() {
                                 streaming: false,
                                 statusText: undefined,
                             }));
-                            showInterruptAlert(tools, sessionId);
                             return;
                         }
                         const finalized = mapResponseToMessage(response);
@@ -576,6 +552,14 @@ export default function AICookingAssistantScreen() {
             onViewShoppingList={handleViewShoppingList}
             onViewCalendar={handleViewCalendar}
             onViewPantry={handleViewPantry}
+            pendingApproval={
+                item.type === 'interrupt' && pendingApproval
+                    ? { pendingTools: pendingApproval.pendingTools }
+                    : null
+            }
+            approvalBusy={isTyping}
+            onApprove={() => void handleResume('approve')}
+            onReject={() => void handleResume('reject')}
         />
     ), [
         addingToMenuRecipeId,
@@ -584,6 +568,9 @@ export default function AICookingAssistantScreen() {
         handleViewShoppingList,
         handleViewCalendar,
         handleViewPantry,
+        pendingApproval,
+        isTyping,
+        handleResume,
     ]);
 
     return (
@@ -607,27 +594,6 @@ export default function AICookingAssistantScreen() {
                 className="flex-1"
                 keyboardVerticalOffset={headerHeight}
             >
-                {pendingApproval && (
-                    <View className="mx-4 mb-2 p-3 rounded-xl border border-line bg-surface">
-                        <Text className="text-ink text-sm font-medium mb-2">Approve these changes?</Text>
-                        <View className="flex-row gap-2">
-                            <TouchableOpacity
-                                className="flex-1 bg-herb py-2 rounded-lg items-center"
-                                onPress={() => void handleResume('approve')}
-                                disabled={isTyping}
-                            >
-                                <Text className="text-white text-sm">Approve</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                className="flex-1 bg-sage py-2 rounded-lg items-center"
-                                onPress={() => void handleResume('reject')}
-                                disabled={isTyping}
-                            >
-                                <Text className="text-ink text-sm">Reject</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                )}
                 {!historyReady ? (
                     <View className="flex-1 px-4 pt-4">
                         <SkeletonList count={4} />

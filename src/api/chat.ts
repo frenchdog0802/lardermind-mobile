@@ -188,8 +188,12 @@ async function consumeSseStream(
     const wrappedHandlers: StreamSendHandlers = {
         onToken: handlers.onToken,
         onStatus: handlers.onStatus,
-        onInterrupt: handlers.onInterrupt,
         onSessionTitle: handlers.onSessionTitle,
+        onInterrupt: (response) => {
+            // HITL interrupt is a terminal SSE event (no `done`); do not treat stream end as failure.
+            receivedTerminalEvent = true;
+            handlers.onInterrupt?.(response);
+        },
         onDone: (response) => {
             receivedTerminalEvent = true;
             handlers.onDone(response);

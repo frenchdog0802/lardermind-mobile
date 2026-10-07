@@ -70,4 +70,35 @@ describe('chatApi.streamSend', () => {
         expect(onError).not.toHaveBeenCalled();
         expect(onDone).toHaveBeenCalledWith(donePayload);
     });
+
+    it('treats SSE interrupt as terminal and does not call onError', async () => {
+        const interruptPayload = {
+            type: 'interrupt',
+            message: 'Approval required before applying changes.',
+            data: {
+                sessionId: 's1',
+                pendingTools: [{ name: 'createRecipe', argsSummary: '燙青菜' }],
+            },
+        };
+        (expoFetch as jest.Mock).mockResolvedValue({
+            ok: true,
+            body: sseStream(
+                `event: interrupt\ndata: ${JSON.stringify(interruptPayload)}\n\n`,
+            ),
+        });
+
+        const onToken = jest.fn();
+        const onDone = jest.fn();
+        const onError = jest.fn();
+        const onInterrupt = jest.fn();
+
+        await chatApi.streamSend(
+            { message: 'create side dishes' },
+            { onToken, onDone, onError, onInterrupt },
+        );
+
+        expect(onInterrupt).toHaveBeenCalledWith(interruptPayload);
+        expect(onError).not.toHaveBeenCalled();
+        expect(onDone).not.toHaveBeenCalled();
+    });
 });

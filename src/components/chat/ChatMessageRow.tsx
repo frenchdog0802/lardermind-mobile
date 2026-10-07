@@ -36,6 +36,12 @@ export type ChatMessageItem = {
   statusText?: string;
 };
 
+type PendingToolSummary = {
+  name: string;
+  argsSummary: string;
+  id?: string;
+};
+
 type ChatMessageRowProps = {
   item: ChatMessageItem;
   addingToMenuRecipeId: string | null;
@@ -44,7 +50,34 @@ type ChatMessageRowProps = {
   onViewShoppingList: () => void;
   onViewCalendar: () => void;
   onViewPantry: () => void;
+  pendingApproval?: { pendingTools: PendingToolSummary[] } | null;
+  approvalBusy?: boolean;
+  onApprove?: () => void;
+  onReject?: () => void;
 };
+
+/** Compat: older cardData nested `{ recipe }`; current API uses flat fields. */
+function normalizeRecipeCardData(cardData?: ChatCardData): ChatCardData {
+  if (!cardData) return {};
+  const nested = (cardData as ChatCardData & {
+    recipe?: {
+      id?: string;
+      meal_name?: string;
+      ingredients?: unknown[];
+      instructions?: string[];
+    };
+  }).recipe;
+  if (!nested || typeof nested !== 'object') return cardData;
+  return {
+    ...cardData,
+    recipeId: cardData.recipeId ?? nested.id,
+    recipeName: cardData.recipeName ?? nested.meal_name,
+    ingredientCount:
+      cardData.ingredientCount ??
+      (Array.isArray(nested.ingredients) ? nested.ingredients.length : undefined),
+    steps: cardData.steps ?? nested.instructions,
+  };
+}
 
 function StreamingCaret() {
   const opacity = useRef(new Animated.Value(1)).current;
@@ -82,9 +115,17 @@ function ChatMessageRowComponent({
   onViewShoppingList,
   onViewCalendar,
   onViewPantry,
+  pendingApproval = null,
+  approvalBusy = false,
+  onApprove,
+  onReject,
 }: ChatMessageRowProps) {
   const isUser = item.role === 'user';
   const showStreamingPlaceholder = Boolean(item.streaming && !item.content);
+  const recipeCard =
+    item.type === 'recipe_created' || item.type === 'recipe_imported'
+      ? normalizeRecipeCardData(item.cardData)
+      : null;
 
   return (
     <View className={`mb-4 ${isUser ? 'items-end' : 'items-start'}`}>
@@ -122,18 +163,46 @@ function ChatMessageRowComponent({
           </View>
         )}
 
-        {(item.type === 'recipe_created' || item.type === 'recipe_imported') && item.cardData ? (
+        {item.type === 'interrupt' && pendingApproval ? (
+          <View className="mt-3 pt-3 border-t border-line">
+            <Text className="text-ink text-sm font-medium mb-2">Approve these changes?</Text>
+            {pendingApproval.pendingTools.map((tool, index) => (
+              <Text key={`${tool.name}-${index}`} className="text-xs text-muted mb-1">
+                <Text className="font-medium text-ink">{tool.name}</Text>
+                {tool.argsSummary ? ` — ${tool.argsSummary}` : ''}
+              </Text>
+            ))}
+            <View className="flex-row gap-2 mt-2">
+              <TouchableOpacity
+                className="flex-1 bg-herb py-2 rounded-lg items-center"
+                onPress={onApprove}
+                disabled={approvalBusy}
+              >
+                <Text className="text-white text-sm">Approve</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                className="flex-1 bg-sage py-2 rounded-lg items-center"
+                onPress={onReject}
+                disabled={approvalBusy}
+              >
+                <Text className="text-ink text-sm">Reject</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
+
+        {recipeCard ? (
           <View className="mt-3 bg-linen rounded-xl p-4 border border-line">
             <Text className="font-bold text-lg text-ink mb-1">
-              {item.type === 'recipe_imported' ? 'Imported' : 'Recipe'}: {item.cardData.recipeName}
+              {item.type === 'recipe_imported' ? 'Imported' : 'Recipe'}: {recipeCard.recipeName}
             </Text>
             <Text className="text-sm text-muted mb-3">
-              {item.cardData.ingredientCount ?? 0} ingredients · {(item.cardData.steps ?? []).length}{' '}
+              {recipeCard.ingredientCount ?? 0} ingredients · {(recipeCard.steps ?? []).length}{' '}
               steps
             </Text>
-            {(item.cardData.steps ?? []).length > 0 ? (
+            {(recipeCard.steps ?? []).length > 0 ? (
               <View className="mb-3">
-                {(item.cardData.steps ?? []).map((step, index) => (
+                {(recipeCard.steps ?? []).map((step, index) => (
                   <View key={index} className="flex-row mb-2">
                     <View className="w-5 h-5 rounded-full bg-sage items-center justify-center mr-2 mt-0.5">
                       <Text className="text-xs font-medium text-herb-deep">{index + 1}</Text>
@@ -145,16 +214,16 @@ function ChatMessageRowComponent({
             ) : null}
             <View className="flex-row gap-2">
               <TouchableOpacity
-                onPress={() => item.cardData?.recipeId && onViewCreatedRecipe(item.cardData.recipeId)}
+                onPress={() => recipeCard.recipeId && onViewCreatedRecipe(recipeCard.recipeId)}
                 className="flex-1 bg-sage py-2 rounded-lg items-center border border-line"
               >
                 <Text className="text-herb-deep text-sm">Edit Recipe</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() =>
-                  item.cardData?.recipeId && onAddCreatedRecipeToMenu(item.cardData.recipeId)
+                  recipeCard.recipeId && onAddCreatedRecipeToMenu(recipeCard.recipeId)
                 }
-                disabled={addingToMenuRecipeId === item.cardData.recipeId}
+                disabled={addingToMenuRecipeId === recipeCard.recipeId}
                 className="flex-1 bg-sage py-2 rounded-lg items-center border border-line"
               >
                 <Text className="text-herb-deep text-sm">Add to today's dinner</Text>
