@@ -1,6 +1,7 @@
 import React, { memo } from 'react';
 import { View, Text, Pressable } from 'react-native';
 import { PlusIcon, MinusIcon, CheckIcon, TrashIcon } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { QuantityLabel } from '../UnitSelect';
 import type { MeasurementSystem } from '../../utils/units';
 import { colors } from '../../theme/tokens';
@@ -11,6 +12,8 @@ export type ShoppingListRowItem = {
   quantity: number;
   unit: string;
   checked: boolean;
+  synced_to_pantry?: boolean;
+  ingredient_id?: string;
   unit_kind?: string;
   base_unit?: string;
   default_display_unit?: string;
@@ -31,6 +34,8 @@ function ShoppingListRowComponent({
   onUpdateQuantity,
   onRemove,
 }: ShoppingListRowProps) {
+  const { t } = useTranslation();
+
   return (
     <View
       className={`flex-row items-center p-3 bg-surface rounded-xl mb-2 border border-line ${
@@ -60,6 +65,16 @@ function ShoppingListRowComponent({
         >
           {item.name}
         </Text>
+        {item.checked ? (
+          <Text
+            className="text-xs mt-0.5"
+            style={{ color: item.synced_to_pantry ? colors.herbDeep : '#92400e' }}
+          >
+            {item.synced_to_pantry
+              ? t('shopping.syncedToPantry')
+              : t('shopping.pendingSync')}
+          </Text>
+        ) : null}
       </View>
 
       <View className="flex-row items-center gap-1.5 mr-2" style={{ flexShrink: 0 }}>

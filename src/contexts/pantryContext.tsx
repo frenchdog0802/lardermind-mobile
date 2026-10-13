@@ -15,7 +15,12 @@ import { folderApi } from '../api/folder';
 import { ingredientApi } from '../api/ingredient';
 import { recipeApi } from '../api/recipe';
 import { pantryItemApi, parsePantryItem, parsePantryItems } from '../api/pantryItem';
-import { shoppingListApi, parseShoppingListItems } from '../api/shoppingList';
+import {
+    shoppingListApi,
+    parseShoppingListItems,
+    parseSyncResult,
+    parseUnsyncResult,
+} from '../api/shoppingList';
 import { mealPlanApi } from '../api/mealPlan';
 import { userPreferencesApi } from '../api/userPreferences';
 import { useAuth } from './authContext';
@@ -217,6 +222,12 @@ interface PantryContextType {
     removeShoppingListItem: (id: string) => Promise<void>;
     markAllShoppingListChecked: () => Promise<number>;
     retryShoppingListSync: () => Promise<void>;
+    syncShoppingItemsToPantry: (
+        items: Array<{ id: string; quantity?: number; unit?: string }>,
+    ) => Promise<ApiResponse<{ synced: ShoppingListItem[]; skipped: Array<{ id: string; reason: string }> }>>;
+    unsyncShoppingItemsFromPantry: (
+        itemIds: string[],
+    ) => Promise<ApiResponse<{ unsynced: ShoppingListItem[]; skipped: Array<{ id: string; reason: string }> }>>;
 
     // Meal plans
     mealPlan: MealPlan[];
@@ -753,6 +764,64 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
         await runFlush();
     }, [runFlush]);
 
+    const syncShoppingItemsToPantry = useCallback(
+        async (items: Array<{ id: string; quantity?: number; unit?: string }>) => {
+            const response = await shoppingListApi.syncToPantry(items);
+            if (response.success && response.data) {
+                const result = parseSyncResult(response.data);
+                const byId = new Map(result.synced.map((i) => [i.id, i]));
+                setShoppingList((prev) => {
+                    const next = asList(prev).map((item) => {
+                        const synced = byId.get(item.id);
+                        return synced
+                            ? { ...item, ...synced, synced_to_pantry: true }
+                            : item;
+                    });
+                    if (userId) {
+                        void saveSnapshot(userId, next);
+                    }
+                    return next;
+                });
+                await fetchAllPantryItems();
+                return { ...response, data: result };
+            }
+            return response as ApiResponse<{
+                synced: ShoppingListItem[];
+                skipped: Array<{ id: string; reason: string }>;
+            }>;
+        },
+        [userId, fetchAllPantryItems],
+    );
+
+    const unsyncShoppingItemsFromPantry = useCallback(
+        async (itemIds: string[]) => {
+            const response = await shoppingListApi.unsyncFromPantry(itemIds);
+            if (response.success && response.data) {
+                const result = parseUnsyncResult(response.data);
+                const byId = new Map(result.unsynced.map((i) => [i.id, i]));
+                setShoppingList((prev) => {
+                    const next = asList(prev).map((item) => {
+                        const unsynced = byId.get(item.id);
+                        return unsynced
+                            ? { ...item, ...unsynced, synced_to_pantry: false }
+                            : item;
+                    });
+                    if (userId) {
+                        void saveSnapshot(userId, next);
+                    }
+                    return next;
+                });
+                await fetchAllPantryItems();
+                return { ...response, data: result };
+            }
+            return response as ApiResponse<{
+                unsynced: ShoppingListItem[];
+                skipped: Array<{ id: string; reason: string }>;
+            }>;
+        },
+        [userId, fetchAllPantryItems],
+    );
+
     // === MEAL PLAN FUNCTIONS ===
     const fetchAllMealPlans = useCallback(async (): Promise<MealPlan[]> => {
         setResourceLoading('mealPlan', true);
@@ -863,6 +932,8 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
             removeShoppingListItem,
             markAllShoppingListChecked,
             retryShoppingListSync,
+            syncShoppingItemsToPantry,
+            unsyncShoppingItemsFromPantry,
             fetchAllMealPlans,
             addMealPlan,
             updateMealPlan,
@@ -902,6 +973,8 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
             removeShoppingListItem,
             markAllShoppingListChecked,
             retryShoppingListSync,
+            syncShoppingItemsToPantry,
+            unsyncShoppingItemsFromPantry,
             fetchAllMealPlans,
             addMealPlan,
             updateMealPlan,

@@ -79,10 +79,28 @@ export type ShoppingListItem = {
     quantity: number;
     unit: string;
     checked: boolean;
+    /** True when quantity has been merged into pantry via batch sync. */
+    synced_to_pantry?: boolean;
     ingredient_id?: string;
     unit_kind?: string;
     base_unit?: string;
     default_display_unit?: string;
+};
+
+export type SyncToPantryItemInput = {
+    id: string;
+    quantity?: number;
+    unit?: string;
+};
+
+export type SyncToPantryResult = {
+    synced: ShoppingListItem[];
+    skipped: Array<{ id: string; reason: string }>;
+};
+
+export type UnsyncFromPantryResult = {
+    unsynced: ShoppingListItem[];
+    skipped: Array<{ id: string; reason: string }>;
 };
 
 export type ShoppingListSyncStatus = {

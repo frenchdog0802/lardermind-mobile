@@ -1,10 +1,17 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { View, Text, TouchableOpacity, TextInput } from 'react-native';
+import {
+    View,
+    Text,
+    TouchableOpacity,
+    TextInput,
+    Modal,
+    ScrollView,
+    Alert,
+} from 'react-native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useTranslation } from 'react-i18next';
 import { usePantry } from '../contexts/pantryContext';
 import { PlusIcon, CheckIcon, SearchIcon, XIcon } from 'lucide-react-native';
-import { useNavigation } from '@react-navigation/native';
 import AppHeader from '../components/AppHeader';
 import { UnitSelect, preferredUnitForIngredient } from '../components/UnitSelect';
 import { ShoppingListRow, type ShoppingListRowItem } from '../components/shopping/ShoppingListRow';
@@ -13,19 +20,28 @@ import type { MeasurementSystem } from '../utils/units';
 import { colors } from '../theme/tokens';
 import { DRAW_DISTANCE } from '../constants/listPerf';
 
+type ReviewDraft = {
+    id: string;
+    name: string;
+    quantity: string;
+    unit: string;
+    selected: boolean;
+    hasIngredient: boolean;
+};
+
 export default function ShoppingListScreen() {
     const { t } = useTranslation();
-    const navigation = useNavigation();
     const {
         shoppingList: oriShoppingList,
         shoppingListSyncStatus,
         fetchAllShoppingListItems,
-        fetchAllPantryItems,
         updateShoppingListItem,
         addShoppingListItem,
         removeShoppingListItem,
         markAllShoppingListChecked,
         retryShoppingListSync,
+        syncShoppingItemsToPantry,
+        unsyncShoppingItemsFromPantry,
         ingredients,
         userSettings,
         loading,
@@ -38,10 +54,15 @@ export default function ShoppingListScreen() {
     );
     const [showMessage, setShowMessage] = useState(false);
     const [message, setMessage] = useState('');
+    const [undoIds, setUndoIds] = useState<string[] | null>(null);
+    const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [isAddingItem, setIsAddingItem] = useState(false);
     const [isCompletingAll, setIsCompletingAll] = useState(false);
     const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+    const [showReview, setShowReview] = useState(false);
+    const [reviewDrafts, setReviewDrafts] = useState<ReviewDraft[]>([]);
+    const [isSyncing, setIsSyncing] = useState(false);
     const [newItem, setNewItem] = useState({
         name: '',
         quantity: '1',
@@ -56,8 +77,13 @@ export default function ShoppingListScreen() {
             await fetchAllShoppingListItems();
             setHasLoadedOnce(true);
         })();
-        // Only load on mount; list updates flow through pantry context.
         // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+        };
     }, []);
 
     const filteredItems = useMemo(() => {
@@ -70,7 +96,23 @@ export default function ShoppingListScreen() {
         });
     }, [shoppingList, searchQuery]);
 
+    const pendingSyncItems = useMemo(
+        () => shoppingList.filter(item => item.checked && !item.synced_to_pantry),
+        [shoppingList],
+    );
+
     const showSkeleton = !hasLoadedOnce && loading && filteredItems.length === 0;
+
+    const showToast = useCallback((text: string, idsForUndo?: string[]) => {
+        if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+        setMessage(text);
+        setShowMessage(true);
+        setUndoIds(idsForUndo ?? null);
+        undoTimerRef.current = setTimeout(() => {
+            setShowMessage(false);
+            setUndoIds(null);
+        }, idsForUndo ? 10000 : 2000);
+    }, []);
 
     const handleUpdateQuantity = useCallback((item: ShoppingListRowItem, delta: number) => {
         const current = shoppingListRef.current.find((i) => i.id === item.id) ?? item;
@@ -82,10 +124,37 @@ export default function ShoppingListScreen() {
 
     const handleTogglePurchased = useCallback((id: string) => {
         const item = shoppingListRef.current.find((i) => i.id === id);
-        if (item) {
-            void updateShoppingListItem({ ...item, checked: !item.checked });
+        if (!item) return;
+
+        if (item.checked && item.synced_to_pantry) {
+            Alert.alert(
+                t('shopping.title'),
+                t('shopping.uncheckSyncedConfirm'),
+                [
+                    { text: t('shopping.syncCancel'), style: 'cancel' },
+                    {
+                        text: t('shopping.uncheckSyncedNo'),
+                        onPress: () => {
+                            void updateShoppingListItem({ ...item, checked: false });
+                        },
+                    },
+                    {
+                        text: t('shopping.uncheckSyncedYes'),
+                        style: 'destructive',
+                        onPress: () => {
+                            void (async () => {
+                                await unsyncShoppingItemsFromPantry([item.id]);
+                                await updateShoppingListItem({ ...item, checked: false });
+                            })();
+                        },
+                    },
+                ],
+            );
+            return;
         }
-    }, [updateShoppingListItem]);
+
+        void updateShoppingListItem({ ...item, checked: !item.checked });
+    }, [t, updateShoppingListItem, unsyncShoppingItemsFromPantry]);
 
     const handleRemove = useCallback((id: string) => {
         void removeShoppingListItem(id);
@@ -103,10 +172,7 @@ export default function ShoppingListScreen() {
         setIsCompletingAll(true);
         try {
             const count = await markAllShoppingListChecked();
-            await fetchAllPantryItems();
-            setMessage(t('shopping.allPurchased', { count }));
-            setShowMessage(true);
-            setTimeout(() => setShowMessage(false), 2000);
+            showToast(t('shopping.allPurchased', { count }));
         } finally {
             setIsCompletingAll(false);
         }
@@ -124,12 +190,62 @@ export default function ShoppingListScreen() {
 
         setNewItem({ name: '', quantity: '1', unit: 'pcs' });
         setIsAddingItem(false);
-        setMessage(t('shopping.itemAdded'));
-        setShowMessage(true);
-        setTimeout(() => setShowMessage(false), 2000);
+        showToast(t('shopping.itemAdded'));
         requestAnimationFrame(() => {
             listRef.current?.scrollToOffset({ offset: 0, animated: true });
         });
+    };
+
+    const openReviewSheet = () => {
+        if (!shoppingListSyncStatus.isOnline) {
+            showToast(t('shopping.syncToPantryOffline'));
+            return;
+        }
+        setReviewDrafts(
+            pendingSyncItems.map(item => ({
+                id: item.id,
+                name: item.name,
+                quantity: String(item.quantity),
+                unit: item.unit,
+                selected: Boolean(item.ingredient_id),
+                hasIngredient: Boolean(item.ingredient_id),
+            })),
+        );
+        setShowReview(true);
+    };
+
+    const handleConfirmSync = async () => {
+        const selected = reviewDrafts.filter(d => d.selected);
+        if (selected.length === 0) {
+            showToast(t('shopping.syncEmpty'));
+            return;
+        }
+        setIsSyncing(true);
+        try {
+            const res = await syncShoppingItemsToPantry(
+                selected.map(d => ({
+                    id: d.id,
+                    quantity: parseFloat(d.quantity) || 0,
+                    unit: d.unit,
+                })),
+            );
+            if (res.success && res.data) {
+                const ids = res.data.synced.map(i => i.id);
+                setShowReview(false);
+                showToast(t('shopping.syncSuccess', { n: ids.length }), ids);
+            }
+        } finally {
+            setIsSyncing(false);
+        }
+    };
+
+    const handleUndoSync = async () => {
+        if (!undoIds?.length) return;
+        const ids = undoIds;
+        setUndoIds(null);
+        setShowMessage(false);
+        if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+        await unsyncShoppingItemsFromPantry(ids);
     };
 
     const renderItem = useCallback(({ item }: { item: ShoppingListRowItem }) => (
@@ -142,7 +258,6 @@ export default function ShoppingListScreen() {
         />
     ), [measurementSystem, handleTogglePurchased, handleUpdateQuantity, handleRemove]);
 
-    // Only surface problems — routine online sync stays invisible (like Pantry).
     const showSyncBanner =
         !shoppingListSyncStatus.isOnline ||
         (Boolean(shoppingListSyncStatus.lastSyncError) &&
@@ -178,8 +293,15 @@ export default function ShoppingListScreen() {
                 )}
 
                 {showMessage && (
-                    <View className="mb-4 p-3 bg-sage border border-line rounded-xl">
-                        <Text className="text-herb-deep text-sm font-medium">{message}</Text>
+                    <View className="mb-4 p-3 bg-sage border border-line rounded-xl flex-row items-center justify-between">
+                        <Text className="text-herb-deep text-sm font-medium flex-1">{message}</Text>
+                        {undoIds ? (
+                            <TouchableOpacity onPress={() => void handleUndoSync()} className="ml-2">
+                                <Text className="text-herb-deep text-sm font-bold underline">
+                                    {t('shopping.undo')}
+                                </Text>
+                            </TouchableOpacity>
+                        ) : null}
                     </View>
                 )}
 
@@ -257,7 +379,7 @@ export default function ShoppingListScreen() {
                             </TouchableOpacity>
                             <TouchableOpacity
                                 testID="shopping-save-item"
-                                onPress={handleAddItem}
+                                onPress={() => void handleAddItem()}
                                 className="flex-1 bg-herb py-3 rounded-lg"
                             >
                                 <Text className="text-white text-center font-medium">{t('common.add')}</Text>
@@ -266,11 +388,22 @@ export default function ShoppingListScreen() {
                     </View>
                 )}
 
+                {pendingSyncItems.length > 0 && (
+                    <TouchableOpacity
+                        onPress={openReviewSheet}
+                        className="mb-4 bg-herb py-3 px-4 rounded-xl items-center"
+                    >
+                        <Text className="text-white font-medium">
+                            {t('shopping.syncToPantry', { n: pendingSyncItems.length })}
+                        </Text>
+                    </TouchableOpacity>
+                )}
+
                 <View className="bg-surface rounded-xl overflow-hidden flex-1 border border-line">
                     <View className="p-4 border-b border-line bg-linen flex-row items-center justify-between">
                         <Text className="font-semibold text-ink">{t('shopping.itemsToBuy')}</Text>
                         <TouchableOpacity
-                            onPress={handleCompleteAll}
+                            onPress={() => void handleCompleteAll()}
                             disabled={uncheckedCount === 0 || isCompletingAll}
                             className={`flex-row items-center px-3 py-1.5 rounded-lg ${
                                 uncheckedCount === 0 || isCompletingAll ? 'bg-sage' : 'bg-herb'
@@ -311,6 +444,83 @@ export default function ShoppingListScreen() {
                     )}
                 </View>
             </View>
+
+            <Modal visible={showReview} animationType="slide" transparent onRequestClose={() => setShowReview(false)}>
+                <View className="flex-1 justify-end bg-black/40">
+                    <View className="bg-surface rounded-t-2xl max-h-[85%] border border-line">
+                        <View className="p-4 border-b border-line">
+                            <Text className="text-ink font-semibold text-lg">{t('shopping.syncReviewTitle')}</Text>
+                            <Text className="text-muted text-sm mt-1">{t('shopping.syncNonFoodHint')}</Text>
+                        </View>
+                        <ScrollView className="px-4">
+                            {reviewDrafts.map((draft, idx) => (
+                                <View key={draft.id} className="py-3 border-b border-line">
+                                    <TouchableOpacity
+                                        onPress={() =>
+                                            setReviewDrafts(prev =>
+                                                prev.map((d, i) =>
+                                                    i === idx ? { ...d, selected: !d.selected } : d,
+                                                ),
+                                            )
+                                        }
+                                        className="flex-row items-center mb-2"
+                                    >
+                                        <View
+                                            className={`w-5 h-5 rounded border-2 mr-3 items-center justify-center ${
+                                                draft.selected ? 'bg-herb border-herb' : 'border-line'
+                                            }`}
+                                        >
+                                            {draft.selected ? <CheckIcon size={12} color="#fff" /> : null}
+                                        </View>
+                                        <Text className="text-ink font-medium capitalize flex-1">{draft.name}</Text>
+                                    </TouchableOpacity>
+                                    <View className="flex-row gap-2 ml-8">
+                                        <TextInput
+                                            value={draft.quantity}
+                                            onChangeText={(text) =>
+                                                setReviewDrafts(prev =>
+                                                    prev.map((d, i) =>
+                                                        i === idx ? { ...d, quantity: text } : d,
+                                                    ),
+                                                )
+                                            }
+                                            keyboardType="numeric"
+                                            className="flex-1 p-2 border border-line rounded-lg bg-linen text-ink"
+                                        />
+                                        <TextInput
+                                            value={draft.unit}
+                                            onChangeText={(text) =>
+                                                setReviewDrafts(prev =>
+                                                    prev.map((d, i) =>
+                                                        i === idx ? { ...d, unit: text } : d,
+                                                    ),
+                                                )
+                                            }
+                                            className="flex-[2] p-2 border border-line rounded-lg bg-linen text-ink"
+                                        />
+                                    </View>
+                                </View>
+                            ))}
+                        </ScrollView>
+                        <View className="p-4 flex-row gap-2 border-t border-line">
+                            <TouchableOpacity
+                                onPress={() => setShowReview(false)}
+                                disabled={isSyncing}
+                                className="flex-1 bg-linen border border-line py-3 rounded-xl"
+                            >
+                                <Text className="text-ink text-center font-medium">{t('shopping.syncCancel')}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                onPress={() => void handleConfirmSync()}
+                                disabled={isSyncing || reviewDrafts.every(d => !d.selected)}
+                                className="flex-1 bg-herb py-3 rounded-xl"
+                            >
+                                <Text className="text-white text-center font-medium">{t('shopping.syncConfirm')}</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }

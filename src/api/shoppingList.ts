@@ -1,5 +1,11 @@
 import { api } from './client';
-import { ShoppingListItem, ApiResponse } from '../types';
+import {
+    ShoppingListItem,
+    ApiResponse,
+    SyncToPantryItemInput,
+    SyncToPantryResult,
+    UnsyncFromPantryResult,
+} from '../types';
 
 type ShoppingListItemDto = {
     id?: string;
@@ -10,12 +16,17 @@ type ShoppingListItemDto = {
 function fromDto(dto: ShoppingListItemDto): ShoppingListItem {
     const details = dto.details ?? {};
     const flat = dto as ShoppingListItemDto & Partial<ShoppingListItem>;
+    const synced =
+        flat.synced_to_pantry ??
+        (details.synced_to_pantry as boolean | undefined) ??
+        false;
     return {
         id: String(flat.id ?? details.id ?? ''),
         name: String(flat.name ?? details.name ?? ''),
         quantity: Number(flat.quantity ?? details.quantity ?? 0),
         unit: String(flat.unit ?? details.unit ?? ''),
         checked: Boolean(flat.checked ?? details.checked ?? false),
+        synced_to_pantry: Boolean(synced),
         ingredient_id:
             flat.ingredient_id != null
                 ? String(flat.ingredient_id)
@@ -86,6 +97,32 @@ export function parseShoppingListItem(data: unknown): ShoppingListItem | null {
     return fromDto(obj as ShoppingListItemDto);
 }
 
+export function parseSyncResult(data: unknown): SyncToPantryResult {
+    const root = (data && typeof data === 'object' ? data : {}) as {
+        synced?: unknown;
+        skipped?: unknown;
+    };
+    return {
+        synced: parseShoppingListItems(root.synced ?? []),
+        skipped: Array.isArray(root.skipped)
+            ? (root.skipped as Array<{ id: string; reason: string }>)
+            : [],
+    };
+}
+
+export function parseUnsyncResult(data: unknown): UnsyncFromPantryResult {
+    const root = (data && typeof data === 'object' ? data : {}) as {
+        unsynced?: unknown;
+        skipped?: unknown;
+    };
+    return {
+        unsynced: parseShoppingListItems(root.unsynced ?? []),
+        skipped: Array.isArray(root.skipped)
+            ? (root.skipped as Array<{ id: string; reason: string }>)
+            : [],
+    };
+}
+
 export const shoppingListApi = {
     list: (query?: string): Promise<ApiResponse<unknown>> =>
         api.get<unknown>(query ? `shopping-list?query=${encodeURIComponent(query)}` : 'shopping-list'),
@@ -101,4 +138,10 @@ export const shoppingListApi = {
 
     delete: (id: string | number): Promise<ApiResponse<void>> =>
         api.delete<void>(`shopping-list/${id}`),
+
+    syncToPantry: (items: SyncToPantryItemInput[]): Promise<ApiResponse<unknown>> =>
+        api.post<unknown>('shopping-list/sync-to-pantry', { items }),
+
+    unsyncFromPantry: (itemIds: string[]): Promise<ApiResponse<unknown>> =>
+        api.post<unknown>('shopping-list/unsync-from-pantry', { item_ids: itemIds }),
 };
