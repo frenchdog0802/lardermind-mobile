@@ -176,18 +176,47 @@ export default function AICookingAssistantScreen() {
                     list.find((s) => s.isDefault)?.id ?? list[0]?.id ?? null;
                 setActiveSessionId(initialId);
                 const response = await chatApi.getHistory(initialId ?? undefined);
-                if (response.success && response.data?.messages?.length) {
-                    setActiveSessionId(response.data.sessionId ?? initialId);
-                    setMessages(response.data.messages.map((entry: HistoryMessage) => ({
-                        id: entry.id,
-                        role: entry.role,
-                        content: entry.content,
-                        type: entry.responseType as ChatResponseType | undefined,
-                        cardData: entry.cardData as ResponseCardData | undefined,
-                        timestamp: entry.createdAt * 1000,
-                    })));
+                if (response.success && response.data) {
+                    const sid = response.data.sessionId ?? initialId;
+                    setActiveSessionId(sid);
+                    const mapped: Message[] = response.data.messages?.length
+                        ? response.data.messages.map((entry: HistoryMessage) => ({
+                              id: entry.id,
+                              role: entry.role,
+                              content: entry.content,
+                              type: entry.responseType as ChatResponseType | undefined,
+                              cardData: entry.cardData as ResponseCardData | undefined,
+                              timestamp: entry.createdAt * 1000,
+                          }))
+                        : [];
+                    const pending = response.data.pendingInterrupt;
+                    const hasPending = Boolean(sid && pending?.pendingTools?.length);
+                    setMessages(
+                        hasPending && !mapped.some((m) => m.type === 'interrupt')
+                            ? [
+                                  ...mapped,
+                                  {
+                                      id: `interrupt-restored-${Date.now()}`,
+                                      role: 'assistant',
+                                      content:
+                                          'I need your approval before making these changes.',
+                                      timestamp: Date.now(),
+                                      type: 'interrupt' as ChatResponseType,
+                                  },
+                              ]
+                            : mapped,
+                    );
+                    if (hasPending && sid && pending) {
+                        setPendingApproval({
+                            sessionId: sid,
+                            pendingTools: pending.pendingTools,
+                        });
+                    } else {
+                        setPendingApproval(null);
+                    }
                 } else {
                     setMessages([]);
+                    setPendingApproval(null);
                 }
             } catch (error) {
                 console.error('Failed to load chat history', error);
@@ -217,24 +246,52 @@ export default function AICookingAssistantScreen() {
     const handleSwitchSession = useCallback(async (sessionId: string) => {
         if (sessionId === activeSessionId || isTyping) return;
         setActiveSessionId(sessionId);
-        setPendingApproval(null);
         try {
             const response = await chatApi.getHistory(sessionId);
-            if (response.success && response.data?.messages?.length) {
-                setMessages(response.data.messages.map((entry: HistoryMessage) => ({
-                    id: entry.id,
-                    role: entry.role,
-                    content: entry.content,
-                    type: entry.responseType as ChatResponseType | undefined,
-                    cardData: entry.cardData as ResponseCardData | undefined,
-                    timestamp: entry.createdAt * 1000,
-                })));
+            if (response.success && response.data) {
+                const mapped: Message[] = response.data.messages?.length
+                    ? response.data.messages.map((entry: HistoryMessage) => ({
+                          id: entry.id,
+                          role: entry.role,
+                          content: entry.content,
+                          type: entry.responseType as ChatResponseType | undefined,
+                          cardData: entry.cardData as ResponseCardData | undefined,
+                          timestamp: entry.createdAt * 1000,
+                      }))
+                    : [];
+                const pending = response.data.pendingInterrupt;
+                const hasPending = Boolean(pending?.pendingTools?.length);
+                setMessages(
+                    hasPending && !mapped.some((m) => m.type === 'interrupt')
+                        ? [
+                              ...mapped,
+                              {
+                                  id: `interrupt-restored-${Date.now()}`,
+                                  role: 'assistant',
+                                  content:
+                                      'I need your approval before making these changes.',
+                                  timestamp: Date.now(),
+                                  type: 'interrupt' as ChatResponseType,
+                              },
+                          ]
+                        : mapped,
+                );
+                if (hasPending && pending) {
+                    setPendingApproval({
+                        sessionId,
+                        pendingTools: pending.pendingTools,
+                    });
+                } else {
+                    setPendingApproval(null);
+                }
             } else {
                 setMessages([]);
+                setPendingApproval(null);
             }
         } catch (error) {
             console.error(error);
             setMessages([]);
+            setPendingApproval(null);
         }
     }, [activeSessionId, isTyping]);
 
@@ -286,7 +343,7 @@ export default function AICookingAssistantScreen() {
     };
 
     const handleSend = async () => {
-        if (!input.trim()) return;
+        if (!input.trim() || isTyping || pendingApproval) return;
 
         const userMessageContent = input.trim();
         const userMessage: Message = {
@@ -309,7 +366,6 @@ export default function AICookingAssistantScreen() {
         setInput('');
         setInputHeight(INPUT_MIN_HEIGHT);
         setIsTyping(true);
-        setPendingApproval(null);
         nearBottomRef.current = true;
         requestAnimationFrame(() => {
             flatListRef.current?.scrollToEnd({ animated: true });

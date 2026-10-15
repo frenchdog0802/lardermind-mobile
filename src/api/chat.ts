@@ -20,9 +20,26 @@ export type ChatResponseType =
 export interface ChatRequest {
     message: string;
     sessionId?: string;
+    /** Device local calendar date YYYY-MM-DD for agent “today”. */
+    clientLocalDate?: string;
     recipeContext?: {
         recipeId: string;
         recipeName: string;
+    };
+}
+
+function localCalendarDate(): string {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+function withClientLocalDate<T extends { clientLocalDate?: string }>(data: T): T {
+    return {
+        ...data,
+        clientLocalDate: data.clientLocalDate ?? localCalendarDate(),
     };
 }
 
@@ -59,6 +76,10 @@ export interface PendingToolSummary {
     name: string;
     argsSummary: string;
     id?: string;
+}
+
+export interface HistoryPendingInterrupt {
+    pendingTools: PendingToolSummary[];
 }
 
 export interface StreamSendHandlers {
@@ -237,11 +258,14 @@ async function consumeSseStream(
 
 export const chatApi = {
     send: (message: string, options?: { sessionId?: string; recipeContext?: ChatRequest['recipeContext'] }) =>
-        api.post<ChatResponseData>('chat/send', {
-            message,
-            sessionId: options?.sessionId,
-            recipeContext: options?.recipeContext,
-        }),
+        api.post<ChatResponseData>(
+            'chat/send',
+            withClientLocalDate({
+                message,
+                sessionId: options?.sessionId,
+                recipeContext: options?.recipeContext,
+            }),
+        ),
 
     resume: (body: ChatResumeRequest) =>
         api.post<ChatResponseData>('chat/resume', body),
@@ -272,7 +296,7 @@ export const chatApi = {
                 Accept: 'text/event-stream',
                 ...(token ? { Authorization: `Bearer ${token}` } : {}),
             },
-            body: JSON.stringify(data),
+            body: JSON.stringify(withClientLocalDate(data)),
             signal,
         });
 
@@ -299,7 +323,11 @@ export const chatApi = {
         api.delete<{ deleted: boolean }>(`chat/sessions/${id}`),
 
     getHistory: (sessionId?: string) =>
-        api.get<{ sessionId: string; messages: HistoryMessage[] }>(
+        api.get<{
+            sessionId: string;
+            messages: HistoryMessage[];
+            pendingInterrupt?: HistoryPendingInterrupt;
+        }>(
             sessionId ? `chat/history?sessionId=${encodeURIComponent(sessionId)}` : 'chat/history',
         ),
 
