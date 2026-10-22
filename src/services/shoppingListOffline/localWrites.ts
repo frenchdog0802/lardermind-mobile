@@ -1,5 +1,5 @@
 import type { ShoppingListItem } from '../../types';
-import type { ShoppingListMutationPayload, ShoppingListMutationV1 } from './types';
+import type { ShoppingListMutationV1 } from './types';
 import { enqueueUpdate } from './queue';
 
 /**
@@ -50,13 +50,7 @@ export function enqueueMarkAllUpdates(
 ): ShoppingListMutationV1[] {
   let nextQueue = queue;
   for (const item of changed) {
-    const payload: ShoppingListMutationPayload = {
-      name: item.name,
-      quantity: item.quantity,
-      unit: item.unit,
-      checked: true,
-    };
-    nextQueue = enqueueUpdate(nextQueue, item.id, payload);
+    nextQueue = enqueueUpdate(nextQueue, item.id, { checked: true }, item.version);
   }
   return nextQueue;
 }

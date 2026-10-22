@@ -4,6 +4,7 @@ export type {
   ShoppingListSyncStatus,
   ShoppingListSnapshotV1,
   ShoppingListQueueV1,
+  FailedShoppingListMutationV1,
 } from './types';
 export { DEFAULT_SYNC_STATUS, isLocalItemId } from './types';
 export {
@@ -11,6 +12,8 @@ export {
   saveSnapshot,
   loadQueue,
   saveQueue,
+  loadFailed,
+  saveFailed,
   clearUserOfflineData,
 } from './store';
 export {
@@ -21,9 +24,20 @@ export {
   remapItemId,
   remapItemsInList,
   createLocalItemId,
+  createOpId,
+  idempotencyKeyFor,
+  requeueFailedMutations,
 } from './queue';
 export { mergeNames } from './mergeNames';
+export {
+  applyPendingOps,
+  mergeConflictItem,
+  payloadFromEdit,
+  isEmptyPayload,
+  reconcileServerList,
+} from './project';
 export { getIsOnline, subscribeConnectivity, isStateOnline } from './connectivity';
+export { recoverShoppingListAuth } from './authRecovery';
 export {
   createSerialQueue,
   applyItemUpdate,
@@ -31,6 +45,6 @@ export {
   applyMarkAllChecked,
   enqueueMarkAllUpdates,
 } from './localWrites';
-export { flushShoppingListQueue, clearBackoff } from './sync';
+export { flushShoppingListQueue, clearBackoff, backoffDelayMs } from './sync';
 export type { FlushResult } from './sync';
 
