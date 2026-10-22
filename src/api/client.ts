@@ -33,7 +33,16 @@ async function notifyUnauthorized(): Promise<void> {
     }
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
+export type RequestExtras = {
+    headers?: Record<string, string>;
+    /** Shopping sync handles 401 itself so it can retry before signing out. */
+    skipUnauthorizedHandler?: boolean;
+};
+
+async function request<T>(
+    path: string,
+    options: RequestInit & RequestExtras = {},
+): Promise<ApiResponse<T>> {
     let token = '';
     try {
         token = (await authHelper.getJWT()) || '';
@@ -41,7 +50,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<ApiR
         // Token read failed, continue without token
     }
 
-    const headers = new Headers(options.headers);
+    const { skipUnauthorizedHandler, ...fetchOptions } = options;
+    const headers = new Headers(fetchOptions.headers);
     const isFormData =
         typeof FormData !== 'undefined' && options.body instanceof FormData;
     if (
@@ -67,11 +77,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<ApiR
 
     try {
         const res = await fetch(url, {
-            ...options,
+            ...fetchOptions,
             headers,
         });
 
-        if (res.status === 401) {
+        if (res.status === 401 && !skipUnauthorizedHandler) {
             await notifyUnauthorized();
         }
 
@@ -92,7 +102,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<ApiR
         if (responseBody.statusCode == null) {
             responseBody.statusCode = res.status;
         }
-        if (res.status === 401 || responseBody.statusCode === 401) {
+        if (
+            !skipUnauthorizedHandler &&
+            (res.status === 401 || responseBody.statusCode === 401)
+        ) {
             await notifyUnauthorized();
         }
         if (__DEV__) {
@@ -113,9 +126,15 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<ApiR
 export default request;
 
 export const api = {
-    get: <T>(path: string) => request<T>(path),
-    post: <T>(path: string, body?: unknown) =>
-        request<T>(path, { method: 'POST', body: JSON.stringify(body ?? {}) }),
+    get: <T>(path: string, extras?: RequestExtras) =>
+        request<T>(path, { ...extras }),
+    post: <T>(path: string, body?: unknown, extras?: RequestExtras) =>
+        request<T>(path, {
+            method: 'POST',
+            body: JSON.stringify(body ?? {}),
+            headers: extras?.headers,
+            skipUnauthorizedHandler: extras?.skipUnauthorizedHandler,
+        }),
     postForm: <T>(path: string, formData: FormData) =>
         request<T>(path, {
             method: 'POST',
@@ -125,9 +144,24 @@ export const api = {
                 Accept: 'application/json',
             },
         }),
-    put: <T>(path: string, body?: unknown) =>
-        request<T>(path, { method: 'PUT', body: JSON.stringify(body ?? {}) }),
-    patch: <T>(path: string, body?: unknown) =>
-        request<T>(path, { method: 'PATCH', body: JSON.stringify(body ?? {}) }),
-    delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+    put: <T>(path: string, body?: unknown, extras?: RequestExtras) =>
+        request<T>(path, {
+            method: 'PUT',
+            body: JSON.stringify(body ?? {}),
+            headers: extras?.headers,
+            skipUnauthorizedHandler: extras?.skipUnauthorizedHandler,
+        }),
+    patch: <T>(path: string, body?: unknown, extras?: RequestExtras) =>
+        request<T>(path, {
+            method: 'PATCH',
+            body: JSON.stringify(body ?? {}),
+            headers: extras?.headers,
+            skipUnauthorizedHandler: extras?.skipUnauthorizedHandler,
+        }),
+    delete: <T>(path: string, extras?: RequestExtras) =>
+        request<T>(path, {
+            method: 'DELETE',
+            headers: extras?.headers,
+            skipUnauthorizedHandler: extras?.skipUnauthorizedHandler,
+        }),
 };

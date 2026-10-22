@@ -6,6 +6,8 @@ jest.mock('../../services/shoppingListOffline/store', () => ({
   saveQueue: jest.fn(),
   loadSnapshot: jest.fn(async () => []),
   saveSnapshot: jest.fn(),
+  loadFailed: jest.fn(async () => []),
+  saveFailed: jest.fn(),
 }));
 
 jest.mock('../../services/shoppingListOffline/connectivity', () => ({
