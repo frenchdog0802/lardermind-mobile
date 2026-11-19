@@ -1,5 +1,5 @@
 import { fetch as expoFetch } from 'expo/fetch';
-import { api } from './client';
+import { api, notifyUnauthorized } from './client';
 import { authHelper } from './auth-helper';
 import { ApiResponse } from '../types';
 
@@ -36,10 +36,10 @@ function localCalendarDate(): string {
     return `${y}-${m}-${day}`;
 }
 
-function withClientLocalDate<T extends { clientLocalDate?: string }>(data: T): T {
+function withClientLocalDate<T extends object>(data: T): T & { clientLocalDate: string } {
     return {
         ...data,
-        clientLocalDate: data.clientLocalDate ?? localCalendarDate(),
+        clientLocalDate: (data as { clientLocalDate?: string }).clientLocalDate ?? localCalendarDate(),
     };
 }
 
@@ -301,6 +301,10 @@ export const chatApi = {
         });
 
         if (!response.ok) {
+            if (response.status === 401) {
+                // Same session-expiry handling as regular API calls.
+                await notifyUnauthorized();
+            }
             const text = await response.text().catch(() => '');
             handlers.onError(text || `Stream request failed (${response.status})`);
             return;

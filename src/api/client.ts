@@ -23,7 +23,12 @@ export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): voi
     unauthorizedHandler = handler;
 }
 
-async function notifyUnauthorized(): Promise<void> {
+/** Default per-request timeout. Uploads use a longer one. */
+export const REQUEST_TIMEOUT_MS = 25_000;
+export const UPLOAD_TIMEOUT_MS = 90_000;
+export const TIMEOUT_MESSAGE = 'Network timeout: the request took too long. Please try again.';
+
+export async function notifyUnauthorized(): Promise<void> {
     if (!unauthorizedHandler || unauthorizedInFlight) return;
     unauthorizedInFlight = true;
     try {
@@ -33,7 +38,11 @@ async function notifyUnauthorized(): Promise<void> {
     }
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
+async function request<T>(
+    path: string,
+    options: RequestInit = {},
+    timeoutMs: number = REQUEST_TIMEOUT_MS,
+): Promise<ApiResponse<T>> {
     let token = '';
     try {
         token = (await authHelper.getJWT()) || '';
@@ -65,10 +74,23 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<ApiR
         console.log(`[api] ${options.method ?? 'GET'} ${url}`);
     }
 
+    const controller = new AbortController();
+    let timedOut = false;
+    const timer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+    }, timeoutMs);
+    const callerSignal = options.signal;
+    if (callerSignal) {
+        if (callerSignal.aborted) controller.abort();
+        else callerSignal.addEventListener('abort', () => controller.abort(), { once: true });
+    }
+
     try {
         const res = await fetch(url, {
             ...options,
             headers,
+            signal: controller.signal,
         });
 
         if (res.status === 401) {
@@ -103,10 +125,15 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<ApiR
         if (__DEV__) {
             console.error(`API ${options.method ?? 'GET'} ${path} failed:`, error);
         }
+        if (timedOut) {
+            return { success: false, message: TIMEOUT_MESSAGE };
+        }
         return {
             success: false,
             message: 'Network error occurred',
         };
+    } finally {
+        clearTimeout(timer);
     }
 }
 
@@ -117,14 +144,18 @@ export const api = {
     post: <T>(path: string, body?: unknown) =>
         request<T>(path, { method: 'POST', body: JSON.stringify(body ?? {}) }),
     postForm: <T>(path: string, formData: FormData) =>
-        request<T>(path, {
-            method: 'POST',
-            body: formData,
-            headers: {
-                // Let fetch set multipart boundary; do not force JSON.
-                Accept: 'application/json',
+        request<T>(
+            path,
+            {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    // Let fetch set multipart boundary; do not force JSON.
+                    Accept: 'application/json',
+                },
             },
-        }),
+            UPLOAD_TIMEOUT_MS,
+        ),
     put: <T>(path: string, body?: unknown) =>
         request<T>(path, { method: 'PUT', body: JSON.stringify(body ?? {}) }),
     patch: <T>(path: string, body?: unknown) =>

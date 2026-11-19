@@ -67,6 +67,31 @@ describe('auth API', () => {
         });
     });
 
+    describe('account + password reset', () => {
+        it('DELETEs auth/account', async () => {
+            mockedApi.delete.mockResolvedValue({ success: true, message: 'Account deleted', data: null });
+            const res = await auth.deleteAccount();
+            expect(mockedApi.delete).toHaveBeenCalledWith('auth/account');
+            expect(res.success).toBe(true);
+        });
+
+        it('POSTs the email to auth/password-reset/request', async () => {
+            mockedApi.post.mockResolvedValue({ success: true });
+            await auth.requestPasswordReset('a@b.com');
+            expect(mockedApi.post).toHaveBeenCalledWith('auth/password-reset/request', { email: 'a@b.com' });
+        });
+
+        it('POSTs token + password to auth/password-reset/confirm', async () => {
+            mockedApi.post.mockResolvedValue({ success: false, statusCode: 400, code: 'reset_token_invalid' });
+            const res = await auth.confirmPasswordReset('tok', 'newpassword1');
+            expect(mockedApi.post).toHaveBeenCalledWith('auth/password-reset/confirm', {
+                token: 'tok',
+                password: 'newpassword1',
+            });
+            expect(res.code).toBe('reset_token_invalid');
+        });
+    });
+
     describe('googleLogin', () => {
         it('should POST to /auth/google-login with Google ID token', async () => {
             mockedApi.post.mockResolvedValue({
