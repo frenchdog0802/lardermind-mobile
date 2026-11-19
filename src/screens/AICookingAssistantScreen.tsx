@@ -28,7 +28,8 @@ import { useAuth } from '../contexts/authContext';
 import AppHeader from '../components/AppHeader';
 import { ChatMessageRow } from '../components/chat/ChatMessageRow';
 import ChatEmptyState from '../components/chat/ChatEmptyState';
-import { chatApi, ChatResponseData, ChatResponseType, HistoryMessage, PendingToolSummary } from '../api/chat';
+import { chatApi, ChatResponseData, ChatResponseType, HistoryMessage, HistoryPendingInterrupt, PendingToolSummary } from '../api/chat';
+import { classifyResumeFailure, isExpiredApproval } from '../utils/chatResume';
 import { mealPlanApi } from '../api/mealPlan';
 import { unitConversionsApi } from '../api/unitConversions';
 import type { DefineUnitAction } from '../components/chat/ChatMessageRow';
@@ -74,6 +75,37 @@ interface ResponseCardData {
     message?: string;
 }
 
+type PendingApproval = {
+    sessionId: string;
+    pendingTools: PendingToolSummary[];
+    interruptId?: string;
+};
+
+function readInterruptId(data: Record<string, unknown> | undefined): string | undefined {
+    const raw = data?.interruptId;
+    return typeof raw === 'string' && raw.trim() ? raw.trim() : undefined;
+}
+
+function pendingFrom(
+    sessionId: string,
+    tools: PendingToolSummary[],
+    interruptId?: string,
+): PendingApproval {
+    const id = interruptId?.trim();
+    return {
+        sessionId,
+        pendingTools: tools,
+        ...(id ? { interruptId: id } : {}),
+    };
+}
+
+function pendingFromHistory(
+    sessionId: string,
+    pending: HistoryPendingInterrupt,
+): PendingApproval {
+    return pendingFrom(sessionId, pending.pendingTools, pending.interruptId);
+}
+
 interface Message {
     id: string;
     role: 'user' | 'assistant';
@@ -99,6 +131,7 @@ export default function AICookingAssistantScreen() {
     const { isGuest } = useAuth();
     const flatListRef = useRef<FlashListRef<Message>>(null);
     const nearBottomRef = useRef(true);
+    const resumeInFlightRef = useRef(false);
     const [historyReady, setHistoryReady] = useState(false);
     const [loadError, setLoadError] = useState(false);
     const loadSeqRef = useRef(0);
@@ -116,10 +149,7 @@ export default function AICookingAssistantScreen() {
     const [isTyping, setIsTyping] = useState(false);
     const [addingToMenuRecipeId, setAddingToMenuRecipeId] = useState<string | null>(null);
     const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-    const [pendingApproval, setPendingApproval] = useState<{
-        sessionId: string;
-        pendingTools: PendingToolSummary[];
-    } | null>(null);
+    const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
     const [headerHeight, setHeaderHeight] = useState(88);
     const [recognizing, setRecognizing] = useState(false);
     const [composerFocused, setComposerFocused] = useState(false);
@@ -238,7 +268,7 @@ export default function AICookingAssistantScreen() {
                     : mapped,
             );
             if (hasPending && sid && pending) {
-                setPendingApproval({ sessionId: sid, pendingTools: pending.pendingTools });
+                setPendingApproval(pendingFromHistory(sid, pending));
             } else {
                 setPendingApproval(null);
             }
@@ -515,7 +545,9 @@ export default function AICookingAssistantScreen() {
                             (response.data?.sessionId as string | undefined) ??
                             activeSessionId ??
                             '';
-                        setPendingApproval({ sessionId, pendingTools: tools });
+                        setPendingApproval(
+                            pendingFrom(sessionId, tools, readInterruptId(response.data)),
+                        );
                         settleStreaming((message) => ({
                             ...message,
                             type: 'interrupt',
@@ -534,7 +566,9 @@ export default function AICookingAssistantScreen() {
                                 (response.data?.sessionId as string | undefined) ??
                                 activeSessionId ??
                                 '';
-                            setPendingApproval({ sessionId, pendingTools: tools });
+                            setPendingApproval(
+                                pendingFrom(sessionId, tools, readInterruptId(response.data)),
+                            );
                             settleStreaming((message) => ({
                                 ...message,
                                 type: 'interrupt',
@@ -661,22 +695,85 @@ export default function AICookingAssistantScreen() {
 
     const handleResume = useCallback(
         async (decision: 'approve' | 'reject', sessionIdOverride?: string) => {
-            const sessionId = sessionIdOverride ?? pendingApprovalRef.current?.sessionId;
+            // A second tap while the first resume is in flight must not send twice.
+            if (resumeInFlightRef.current) return;
+            const pending = pendingApprovalRef.current;
+            const sessionId = sessionIdOverride ?? pending?.sessionId;
             if (!sessionId) return;
+            const interruptId = pending?.sessionId === sessionId ? pending.interruptId : undefined;
+            resumeInFlightRef.current = true;
             isTypingRef.current = true;
             setIsTyping(true);
+
+            const pushNote = (content: string) => {
+                setMessages((prev) => [
+                    ...prev,
+                    {
+                        id: `ai-note-${Date.now()}`,
+                        role: 'assistant',
+                        content,
+                        type: 'text',
+                        timestamp: Date.now(),
+                    },
+                ]);
+            };
+
             try {
-                const response = await chatApi.resume({ sessionId, decision });
+                const response = await chatApi.resume({
+                    sessionId,
+                    decision,
+                    ...(interruptId ? { interruptId } : {}),
+                });
+                if (!mountedRef.current) return;
+
                 if (!response.success || !response.data) {
-                    // Keep the approval card so the user can retry.
-                    Alert.alert(t('common.error'), response.message || t('ai.resumeError'));
+                    const failure = classifyResumeFailure(response.code, response.statusCode);
+                    // Unclassified failures (network, 5xx, timeout): keep the card so the
+                    // user can retry, and show the server/network message when there is one.
+                    const message = failure.code
+                        ? t(failure.messageKey)
+                        : response.message || t(failure.messageKey);
+                    if (failure.action === 'keep') {
+                        Alert.alert(t(failure.titleKey), message);
+                        return;
+                    }
+                    if (failure.action === 'reload') {
+                        pushNote(message);
+                        Alert.alert(t(failure.titleKey), message);
+                        try {
+                            const history = await chatApi.getHistory(sessionId);
+                            const latest = history.data?.pendingInterrupt;
+                            if (!mountedRef.current) return;
+                            if (history.success && latest?.pendingTools?.length) {
+                                setPendingApproval(pendingFromHistory(sessionId, latest));
+                            } else {
+                                setPendingApproval(null);
+                            }
+                        } catch (error) {
+                            console.error(error);
+                        }
+                        return;
+                    }
+                    setPendingApproval(null);
+                    pushNote(message);
+                    Alert.alert(t(failure.titleKey), message);
                     return;
                 }
-                setPendingApproval(null);
+
+                if (isExpiredApproval(response.data)) {
+                    setPendingApproval(null);
+                    pushNote(response.data.message || t('ai.approvalExpired'));
+                    return;
+                }
+
                 if (response.data.type === 'interrupt') {
                     const tools =
                         (response.data.data?.pendingTools as PendingToolSummary[] | undefined) ?? [];
-                    setPendingApproval({ sessionId, pendingTools: tools });
+                    setPendingApproval(
+                        pendingFrom(sessionId, tools, readInterruptId(response.data.data)),
+                    );
+                } else {
+                    setPendingApproval(null);
                 }
                 const assistantMessage = latestRef.current.mapResponseToMessage(response.data);
                 setMessages((prev) => [...prev, assistantMessage]);
@@ -690,8 +787,9 @@ export default function AICookingAssistantScreen() {
                 }
             } catch (error) {
                 console.error(error);
-                Alert.alert(t('common.error'), t('ai.resumeError'));
+                Alert.alert(t('ai.approvalErrorTitle'), t('ai.approvalError'));
             } finally {
+                resumeInFlightRef.current = false;
                 isTypingRef.current = false;
                 if (mountedRef.current) setIsTyping(false);
             }

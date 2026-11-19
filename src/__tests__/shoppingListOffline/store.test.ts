@@ -1,8 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   clearUserOfflineData,
+  loadFailed,
   loadQueue,
   loadSnapshot,
+  saveFailed,
   saveQueue,
   saveSnapshot,
 } from '../../services/shoppingListOffline/store';
@@ -30,6 +32,26 @@ describe('shoppingListOffline store', () => {
 
     expect(await loadSnapshot('user-a')).toEqual(items);
     expect(await loadQueue('user-a')).toHaveLength(1);
+  });
+
+  it('round-trips failed ops and clears them with the user', async () => {
+    await saveFailed('user-a', [
+      {
+        opId: 'op1',
+        type: 'UPDATE',
+        itemId: '1',
+        payload: { checked: true },
+        baseVersion: 2,
+        createdAt: 1,
+        failedAt: 2,
+        statusCode: 400,
+        code: 'validation_error',
+        message: 'Invalid',
+      },
+    ]);
+    expect(await loadFailed('user-a')).toHaveLength(1);
+    await clearUserOfflineData('user-a');
+    expect(await loadFailed('user-a')).toEqual([]);
   });
 
   it('clearUserOfflineData removes keys', async () => {

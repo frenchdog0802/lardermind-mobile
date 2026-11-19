@@ -1,10 +1,13 @@
 import {
   coalesce,
   createLocalItemId,
+  createOpId,
   enqueueCreate,
   enqueueDelete,
   enqueueUpdate,
+  idempotencyKeyFor,
   remapItemId,
+  requeueFailedMutations,
 } from '../../services/shoppingListOffline/queue';
 import type { ShoppingListMutationV1 } from '../../services/shoppingListOffline/types';
 
@@ -49,6 +52,56 @@ describe('shoppingListOffline queue', () => {
     expect(queue).toEqual([
       expect.objectContaining({ type: 'DELETE', itemId: 'srv-1' }),
     ]);
+  });
+
+  it('keeps the first opId and base version when updates coalesce', () => {
+    let queue: ShoppingListMutationV1[] = [];
+    queue = enqueueUpdate(queue, 'srv-1', { quantity: 1 }, 3);
+    const opId = queue[0].opId;
+    queue = enqueueUpdate(queue, 'srv-1', { checked: true }, 9);
+    expect(queue).toHaveLength(1);
+    expect(queue[0].opId).toBe(opId);
+    expect(queue[0].baseVersion).toBe(3);
+    expect(queue[0].payload).toMatchObject({ quantity: 1, checked: true });
+  });
+
+  it('sends a safe idempotency key and mints a new one when requeueing failures', () => {
+    expect(idempotencyKeyFor('op_abc-1')).toBe('op_abc-1');
+    expect(idempotencyKeyFor('bad key')).toBe('badkey');
+    expect(idempotencyKeyFor('***')).toMatch(/^op_/);
+
+    const failed = [
+      {
+        opId: 'op_old',
+        type: 'CREATE' as const,
+        itemId: 'local_1',
+        payload: { name: 'Milk' },
+        createdAt: 1,
+      },
+    ];
+    const next = requeueFailedMutations(failed);
+    expect(next[0].opId).not.toBe('op_old');
+    expect(next[0].opId).toBe(idempotencyKeyFor(next[0].opId));
+    expect(next[0].payload).toEqual({ name: 'Milk' });
+    expect(createOpId()).toMatch(/^op_/);
+  });
+
+  it('remapItemId copies the server version onto later ops', () => {
+    const queue = remapItemId(
+      [
+        {
+          opId: 'a',
+          type: 'UPDATE',
+          itemId: 'local_1',
+          payload: { checked: true },
+          createdAt: 1,
+        },
+      ],
+      'local_1',
+      'uuid-9',
+      4,
+    );
+    expect(queue[0]).toMatchObject({ itemId: 'uuid-9', baseVersion: 4 });
   });
 
   it('remapItemId rewrites queued ids', () => {

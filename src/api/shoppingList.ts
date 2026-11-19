@@ -20,6 +20,7 @@ function fromDto(dto: ShoppingListItemDto): ShoppingListItem {
         flat.synced_to_pantry ??
         (details.synced_to_pantry as boolean | undefined) ??
         false;
+    const version = readVersion(flat.version ?? details.version);
     return {
         id: String(flat.id ?? details.id ?? ''),
         name: String(flat.name ?? details.name ?? ''),
@@ -51,28 +52,75 @@ function fromDto(dto: ShoppingListItemDto): ShoppingListItem {
                 : details.default_display_unit != null
                   ? String(details.default_display_unit)
                   : undefined,
+        ...(version !== undefined ? { version } : {}),
     };
+}
+
+function readVersion(raw: unknown): number | undefined {
+    if (typeof raw === 'number' && Number.isInteger(raw) && raw >= 0) return raw;
+    if (typeof raw === 'string' && /^\d+$/.test(raw)) return Number(raw);
+    return undefined;
 }
 
 /**
  * Dual-backend payload:
  * - Spring expects { name, details: { quantity, unit, checked } }
- * - Nest expects flat { name, quantity, unit, checked }
+ * - Nest / Workers expects flat { name, quantity, unit, checked }
+ * Expected `version` is sent on both shapes so the two sources agree.
  */
-export function toRequestPayload(data: Partial<ShoppingListItem>) {
-    const quantity = data.quantity;
-    const unit = data.unit;
-    const checked = data.checked ?? false;
+export function toRequestPayload(data: Partial<ShoppingListItem>, expectedVersion?: number) {
+    const details: {
+        quantity?: number;
+        unit?: string;
+        checked?: boolean;
+        version?: number;
+    } = {};
+    const body: {
+        name?: string;
+        quantity?: number;
+        unit?: string;
+        checked?: boolean;
+        version?: number;
+        details: typeof details;
+    } = { details };
+
+    if (data.name !== undefined) body.name = data.name;
+    if (data.quantity !== undefined) {
+        body.quantity = data.quantity;
+        details.quantity = data.quantity;
+    }
+    if (data.unit !== undefined) {
+        body.unit = data.unit;
+        details.unit = data.unit;
+    }
+    if (data.checked !== undefined) {
+        body.checked = data.checked;
+        details.checked = data.checked;
+    }
+    if (expectedVersion !== undefined) {
+        body.version = expectedVersion;
+        details.version = expectedVersion;
+    }
+    return body;
+}
+
+export type ShoppingWriteOptions = {
+    /** Stable per queued op. Replays the original response for 24 hours. */
+    idempotencyKey?: string;
+    /** When set, a mismatch returns 409 `version_conflict` instead of last-write-wins. */
+    expectedVersion?: number;
+    skipUnauthorizedHandler?: boolean;
+};
+
+function writeHeaders(options?: ShoppingWriteOptions): Record<string, string> | undefined {
+    if (!options?.idempotencyKey) return undefined;
+    return { 'Idempotency-Key': options.idempotencyKey };
+}
+
+function writeExtras(options?: ShoppingWriteOptions) {
     return {
-        name: data.name,
-        quantity,
-        unit,
-        checked,
-        details: {
-            quantity,
-            unit,
-            checked,
-        },
+        headers: writeHeaders(options),
+        skipUnauthorizedHandler: options?.skipUnauthorizedHandler,
     };
 }
 
@@ -124,20 +172,42 @@ export function parseUnsyncResult(data: unknown): UnsyncFromPantryResult {
 }
 
 export const shoppingListApi = {
-    list: (query?: string): Promise<ApiResponse<unknown>> =>
-        api.get<unknown>(query ? `shopping-list?query=${encodeURIComponent(query)}` : 'shopping-list'),
+    list: (
+        query?: string,
+        options?: { skipUnauthorizedHandler?: boolean },
+    ): Promise<ApiResponse<unknown>> =>
+        api.get<unknown>(query ? `shopping-list?query=${encodeURIComponent(query)}` : 'shopping-list', {
+            skipUnauthorizedHandler: options?.skipUnauthorizedHandler,
+        }),
 
     get: (id: string | number): Promise<ApiResponse<unknown>> =>
         api.get<unknown>(`shopping-list/${id}`),
 
-    create: (data: Partial<ShoppingListItem>): Promise<ApiResponse<unknown>> =>
-        api.post<unknown>('shopping-list', toRequestPayload(data)),
+    create: (
+        data: Partial<ShoppingListItem>,
+        options?: ShoppingWriteOptions,
+    ): Promise<ApiResponse<unknown>> =>
+        api.post<unknown>('shopping-list', toRequestPayload(data), writeExtras(options)),
 
-    update: (id: string | number, data: Partial<ShoppingListItem>): Promise<ApiResponse<unknown>> =>
-        api.put<unknown>(`shopping-list/${id}`, toRequestPayload(data)),
+    update: (
+        id: string | number,
+        data: Partial<ShoppingListItem>,
+        options?: ShoppingWriteOptions,
+    ): Promise<ApiResponse<unknown>> =>
+        api.put<unknown>(
+            `shopping-list/${id}`,
+            toRequestPayload(data, options?.expectedVersion),
+            writeExtras(options),
+        ),
 
-    delete: (id: string | number): Promise<ApiResponse<void>> =>
-        api.delete<void>(`shopping-list/${id}`),
+    delete: (id: string | number, options?: ShoppingWriteOptions): Promise<ApiResponse<void>> => {
+        const version = options?.expectedVersion;
+        const path =
+            version !== undefined
+                ? `shopping-list/${id}?version=${encodeURIComponent(String(version))}`
+                : `shopping-list/${id}`;
+        return api.delete<void>(path, writeExtras(options));
+    },
 
     syncToPantry: (items: SyncToPantryItemInput[]): Promise<ApiResponse<unknown>> =>
         api.post<unknown>('shopping-list/sync-to-pantry', { items }),

@@ -2,8 +2,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { ShoppingListItem } from '../../types';
 import {
   SHOPPING_LIST_OFFLINE_VERSION,
+  failedKey,
   queueKey,
   snapshotKey,
+  type FailedShoppingListMutationV1,
   type ShoppingListMutationV1,
   type ShoppingListQueueV1,
   type ShoppingListSnapshotV1,
@@ -58,7 +60,36 @@ export async function saveQueue(userId: string, mutations: ShoppingListMutationV
   await AsyncStorage.setItem(queueKey(userId), JSON.stringify(queue));
 }
 
+export async function loadFailed(userId: string): Promise<FailedShoppingListMutationV1[]> {
+  if (!userId) return [];
+  try {
+    const raw = await AsyncStorage.getItem(failedKey(userId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as { version?: number; mutations?: FailedShoppingListMutationV1[] };
+    if (!parsed || parsed.version !== SHOPPING_LIST_OFFLINE_VERSION || !Array.isArray(parsed.mutations)) {
+      return [];
+    }
+    return parsed.mutations;
+  } catch {
+    return [];
+  }
+}
+
+export async function saveFailed(
+  userId: string,
+  mutations: FailedShoppingListMutationV1[],
+): Promise<void> {
+  if (!userId) return;
+  await AsyncStorage.setItem(
+    failedKey(userId),
+    JSON.stringify({
+      version: SHOPPING_LIST_OFFLINE_VERSION,
+      mutations,
+    }),
+  );
+}
+
 export async function clearUserOfflineData(userId: string): Promise<void> {
   if (!userId) return;
-  await AsyncStorage.multiRemove([snapshotKey(userId), queueKey(userId)]);
+  await AsyncStorage.multiRemove([snapshotKey(userId), queueKey(userId), failedKey(userId)]);
 }

@@ -1,8 +1,17 @@
 import type { ShoppingListItem } from '../../types';
 import type { ShoppingListMutationPayload, ShoppingListMutationV1 } from './types';
 
-function newOpId(): string {
+const IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{1,128}$/;
+
+export function createOpId(): string {
   return `op_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/** Header value for `Idempotency-Key`. Falls back when a stored id is unsafe. */
+export function idempotencyKeyFor(opId: string): string {
+  if (IDEMPOTENCY_KEY.test(opId)) return opId;
+  const cleaned = opId.replace(/[^A-Za-z0-9._:-]/g, '').slice(0, 128);
+  return cleaned.length > 0 ? cleaned : createOpId();
 }
 
 export function createLocalItemId(): string {
@@ -52,6 +61,7 @@ export function coalesce(mutations: ShoppingListMutationV1[]): ShoppingListMutat
         ...prev,
         payload: { ...prev.payload, ...op.payload },
         createdAt: op.createdAt,
+        baseVersion: prev.baseVersion ?? op.baseVersion,
       };
       continue;
     }
@@ -75,7 +85,7 @@ export function enqueueCreate(
   return coalesce([
     ...mutations,
     {
-      opId: newOpId(),
+      opId: createOpId(),
       type: 'CREATE',
       itemId,
       payload,
@@ -88,15 +98,17 @@ export function enqueueUpdate(
   mutations: ShoppingListMutationV1[],
   itemId: string,
   payload: ShoppingListMutationPayload,
+  baseVersion?: number,
 ): ShoppingListMutationV1[] {
   return coalesce([
     ...mutations,
     {
-      opId: newOpId(),
+      opId: createOpId(),
       type: 'UPDATE',
       itemId,
       payload,
       createdAt: Date.now(),
+      ...(baseVersion !== undefined ? { baseVersion } : {}),
     },
   ]);
 }
@@ -104,14 +116,16 @@ export function enqueueUpdate(
 export function enqueueDelete(
   mutations: ShoppingListMutationV1[],
   itemId: string,
+  baseVersion?: number,
 ): ShoppingListMutationV1[] {
   return coalesce([
     ...mutations,
     {
-      opId: newOpId(),
+      opId: createOpId(),
       type: 'DELETE',
       itemId,
       createdAt: Date.now(),
+      ...(baseVersion !== undefined ? { baseVersion } : {}),
     },
   ]);
 }
@@ -120,8 +134,30 @@ export function remapItemId(
   mutations: ShoppingListMutationV1[],
   fromId: string,
   toId: string,
+  serverVersion?: number,
 ): ShoppingListMutationV1[] {
-  return mutations.map((m) => (m.itemId === fromId ? { ...m, itemId: toId } : m));
+  return mutations.map((m) => {
+    if (m.itemId !== fromId) return m;
+    return {
+      ...m,
+      itemId: toId,
+      baseVersion: m.baseVersion ?? serverVersion,
+    };
+  });
+}
+
+/** Fresh idempotency keys so a replayed 4xx is not returned for 24 hours. */
+export function requeueFailedMutations(
+  failed: ShoppingListMutationV1[],
+): ShoppingListMutationV1[] {
+  return failed.map((op) => ({
+    opId: createOpId(),
+    type: op.type,
+    itemId: op.itemId,
+    payload: op.payload ? { ...op.payload } : undefined,
+    createdAt: Date.now(),
+    ...(op.baseVersion !== undefined ? { baseVersion: op.baseVersion } : {}),
+  }));
 }
 
 export function remapItemsInList(

@@ -12,6 +12,9 @@ jest.mock('../../services/shoppingListOffline/store', () => ({
   saveSnapshot: jest.fn(),
   loadQueue: jest.fn(),
   saveQueue: jest.fn(),
+  // Dead-letter list added by the hardened sync contract (PR #1).
+  loadFailed: jest.fn(async () => []),
+  saveFailed: jest.fn(async () => undefined),
   clearUserOfflineData: jest.fn(),
 }));
 

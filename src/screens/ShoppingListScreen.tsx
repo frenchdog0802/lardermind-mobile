@@ -258,14 +258,18 @@ export default function ShoppingListScreen() {
         />
     ), [measurementSystem, handleTogglePurchased, handleUpdateQuantity, handleRemove]);
 
+    const failedCount = shoppingListSyncStatus.failedCount ?? 0;
     const showSyncBanner =
         !shoppingListSyncStatus.isOnline ||
+        failedCount > 0 ||
         (Boolean(shoppingListSyncStatus.lastSyncError) &&
             shoppingListSyncStatus.pendingCount > 0);
 
     const syncBannerMessage = !shoppingListSyncStatus.isOnline
         ? t('shopping.syncOffline')
-        : shoppingListSyncStatus.lastSyncError ?? t('shopping.syncPending', { count: shoppingListSyncStatus.pendingCount });
+        : failedCount > 0
+          ? shoppingListSyncStatus.lastSyncError || t('shopping.syncFailed', { count: failedCount })
+          : shoppingListSyncStatus.lastSyncError ?? t('shopping.syncPending', { count: shoppingListSyncStatus.pendingCount });
 
     return (
         <View className="flex-1 bg-linen" testID="shopping-screen">
@@ -278,8 +282,9 @@ export default function ShoppingListScreen() {
                             {syncBannerMessage}
                         </Text>
                         {shoppingListSyncStatus.isOnline &&
-                            shoppingListSyncStatus.lastSyncError &&
-                            shoppingListSyncStatus.pendingCount > 0 && (
+                            (failedCount > 0 ||
+                                (shoppingListSyncStatus.lastSyncError &&
+                                    shoppingListSyncStatus.pendingCount > 0)) && (
                                 <TouchableOpacity
                                     onPress={() => void retryShoppingListSync()}
                                     className="mt-2 self-start bg-herb px-3 py-1.5 rounded-lg"

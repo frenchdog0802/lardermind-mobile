@@ -47,6 +47,8 @@ export interface ChatResumeRequest {
     sessionId: string;
     decision: 'approve' | 'reject';
     note?: string;
+    /** Id of the approval card on screen. Omit to act on whatever is pending. */
+    interruptId?: string;
 }
 
 export interface ChatResponseData {
@@ -80,6 +82,9 @@ export interface PendingToolSummary {
 
 export interface HistoryPendingInterrupt {
     pendingTools: PendingToolSummary[];
+    interruptId?: string;
+    /** Unix seconds. Pending actions older than 20 minutes are expired. */
+    expiresAt?: number;
 }
 
 export interface StreamSendHandlers {
@@ -257,15 +262,14 @@ async function consumeSseStream(
 }
 
 export const chatApi = {
-    send: (message: string, options?: { sessionId?: string; recipeContext?: ChatRequest['recipeContext'] }) =>
-        api.post<ChatResponseData>(
-            'chat/send',
-            withClientLocalDate({
-                message,
-                sessionId: options?.sessionId,
-                recipeContext: options?.recipeContext,
-            }),
-        ),
+    send: (message: string, options?: { sessionId?: string; recipeContext?: ChatRequest['recipeContext'] }) => {
+        const body: ChatRequest = {
+            message,
+            sessionId: options?.sessionId,
+            recipeContext: options?.recipeContext,
+        };
+        return api.post<ChatResponseData>('chat/send', withClientLocalDate(body));
+    },
 
     resume: (body: ChatResumeRequest) =>
         api.post<ChatResponseData>('chat/resume', body),

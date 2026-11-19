@@ -8,7 +8,7 @@ export interface ApiResponse<T = unknown> {
     message?: string;
     data?: T;
     statusCode?: number;
-    /** Machine-readable error code on some failures (e.g. `reset_token_invalid`). */
+    /** Machine-readable error code from the API error envelope (`version_conflict`, `reset_token_invalid`, `unauthorized`, …). */
     code?: string;
 }
 
@@ -91,6 +91,8 @@ export type ShoppingListItem = {
     unit_kind?: string;
     base_unit?: string;
     default_display_unit?: string;
+    /** Server row version. Starts at 1 and increments on each accepted update. */
+    version?: number;
 };
 
 export type SyncToPantryItemInput = {
@@ -112,6 +114,8 @@ export type UnsyncFromPantryResult = {
 export type ShoppingListSyncStatus = {
     isOnline: boolean;
     pendingCount: number;
+    /** Ops moved off the queue after a permanent client error. */
+    failedCount: number;
     isSyncing: boolean;
     lastSyncError: string | null;
     lastSyncedAt: number | null;

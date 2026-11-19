@@ -1,7 +1,0 @@
-Convert this React web (tailwind) component to React Native (native wind).
-
-Ignore all responsive design logic.
-
-Only keep the mobile layout and mobile styles.
-
-Remove desktop and tablet breakpoints, media queries, and RWD conditions.
