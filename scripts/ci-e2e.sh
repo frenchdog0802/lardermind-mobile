@@ -5,6 +5,12 @@
 set -euo pipefail
 
 APK="android/app/build/outputs/apk/release/app-release.apk"
+
+# A slow CI emulator can raise "X isn't responding" system dialogs that cover the app and hide it from Maestro.
+adb shell settings put global hide_error_dialogs 1 || true
+adb shell settings put global package_verifier_enable 0 || true
+adb shell input keyevent KEYCODE_HOME || true
+
 adb install -r "$APK"
 adb shell pm clear com.lardermind.app || true
 

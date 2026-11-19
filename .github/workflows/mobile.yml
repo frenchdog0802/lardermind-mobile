@@ -92,10 +92,14 @@ jobs:
           E2E_EXCLUDE_TAGS: ${{ inputs.include_new_backend_flows && ' ' || 'needs-new-backend' }}
         with:
           api-level: 34
-          target: google_apis
+          # AOSP image: no Pixel Launcher / Google services, which hang ("isn't responding") on CI and cover the app.
+          target: default
           arch: x86_64
           profile: pixel_6
+          ram-size: 4096M
+          heap-size: 576M
           disable-animations: true
+          emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
           script: bash scripts/ci-e2e.sh
 
       - name: Upload Maestro report and screenshots
