@@ -6,4 +6,5 @@ export { PageTitle } from './PageTitle';
 export { PageSubtitle } from './PageSubtitle';
 export { ListRow } from './ListRow';
 export { CachedImage } from './CachedImage';
+export { ErrorBanner } from './ErrorBanner';
 export { Skeleton, SkeletonList, SkeletonListRow, SkeletonHero } from './Skeleton';

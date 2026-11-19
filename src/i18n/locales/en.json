@@ -23,7 +23,8 @@
     "tryDifferentSearch": "Try a different search term",
     "savedSuccess": "Changes saved successfully!",
     "retry": "Retry",
-    "error": "Error"
+    "error": "Error",
+    "loadError": "Couldn't refresh. Check your connection and try again."
   },
   "nav": {
     "home": "Home",

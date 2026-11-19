@@ -23,7 +23,8 @@
     "tryDifferentSearch": "試試其他關鍵字",
     "savedSuccess": "已成功儲存變更！",
     "retry": "重試",
-    "error": "錯誤"
+    "error": "錯誤",
+    "loadError": "無法重新整理，請檢查網路連線後再試一次。"
   },
   "nav": {
     "home": "首頁",

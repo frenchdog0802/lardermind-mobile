@@ -7,6 +7,7 @@ import {
     Modal,
     TextInput,
     Alert,
+    RefreshControl,
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useTranslation } from 'react-i18next';
@@ -30,6 +31,8 @@ import type { MealPlan, Recipe } from '../types';
 import { recipeApi } from '../api/recipe';
 import AppHeader from '../components/AppHeader';
 import { DRAW_DISTANCE } from '../constants/listPerf';
+import { ErrorBanner } from '../components/ui/ErrorBanner';
+import { useFocusRefresh } from '../hooks/useFocusRefresh';
 import { colors } from '../theme/tokens';
 
 export default function CalendarScreen() {
@@ -43,6 +46,7 @@ export default function CalendarScreen() {
         fetchAllRecipes,
         confirmMealPlan,
         skipMealPlan,
+        errorByResource,
     } = usePantry();
 
     const planList = Array.isArray(mealPlan) ? mealPlan : [];
@@ -80,11 +84,13 @@ export default function CalendarScreen() {
 
     const [expandedDates, setExpandedDates] = useState<string[]>([]);
 
-    // Fetch data into pantry context (source of truth)
-    useEffect(() => {
-        void fetchAllMealPlans();
-        void fetchAllRecipes();
-    }, [fetchAllMealPlans, fetchAllRecipes]);
+    // Fetch into the pantry context (source of truth) on focus, at most every ~60 s;
+    // pull-to-refresh always refetches.
+    const fetchCalendarData = useCallback(
+        () => Promise.all([fetchAllMealPlans(), fetchAllRecipes()]),
+        [fetchAllMealPlans, fetchAllRecipes],
+    );
+    const { refresh, refreshing } = useFocusRefresh(fetchCalendarData);
 
     const formatDateString = (date: Date) =>
         `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -491,7 +497,15 @@ export default function CalendarScreen() {
             </View>
 
             {viewMode === 'calendar' ? (
-                <ScrollView className="flex-1 px-4 pt-3">
+                <ScrollView
+                    className="flex-1 px-4 pt-3"
+                    refreshControl={
+                        <RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />
+                    }
+                >
+                    {errorByResource?.mealPlan ? (
+                        <ErrorBanner testID="calendar-load-error" onRetry={() => void refresh()} />
+                    ) : null}
                     {emptyAndPendingBanner}
 
                     <>
@@ -640,6 +654,9 @@ export default function CalendarScreen() {
                         extraData={expandedKey}
                         drawDistance={DRAW_DISTANCE}
                         contentContainerStyle={{ paddingBottom: 40 }}
+                        refreshControl={
+                            <RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />
+                        }
                     />
                 </View>
             )}

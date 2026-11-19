@@ -7,6 +7,7 @@ import {
     Modal,
     ScrollView,
     Alert,
+    RefreshControl,
 } from 'react-native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useTranslation } from 'react-i18next';
@@ -16,6 +17,8 @@ import AppHeader from '../components/AppHeader';
 import { UnitSelect, preferredUnitForIngredient } from '../components/UnitSelect';
 import { ShoppingListRow, type ShoppingListRowItem } from '../components/shopping/ShoppingListRow';
 import { SkeletonList } from '../components/ui/Skeleton';
+import { ErrorBanner } from '../components/ui/ErrorBanner';
+import { useFocusRefresh } from '../hooks/useFocusRefresh';
 import type { MeasurementSystem } from '../utils/units';
 import { colors } from '../theme/tokens';
 import { DRAW_DISTANCE } from '../constants/listPerf';
@@ -45,6 +48,7 @@ export default function ShoppingListScreen() {
         ingredients,
         userSettings,
         loading,
+        errorByResource,
     } = usePantry();
 
     const measurementSystem = (userSettings.measurement_unit === 'imperial' ? 'imperial' : 'metric') as MeasurementSystem;
@@ -59,7 +63,6 @@ export default function ShoppingListScreen() {
     const [searchQuery, setSearchQuery] = useState('');
     const [isAddingItem, setIsAddingItem] = useState(false);
     const [isCompletingAll, setIsCompletingAll] = useState(false);
-    const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
     const [showReview, setShowReview] = useState(false);
     const [reviewDrafts, setReviewDrafts] = useState<ReviewDraft[]>([]);
     const [isSyncing, setIsSyncing] = useState(false);
@@ -72,13 +75,8 @@ export default function ShoppingListScreen() {
     const shoppingListRef = useRef(shoppingList);
     shoppingListRef.current = shoppingList;
 
-    useEffect(() => {
-        void (async () => {
-            await fetchAllShoppingListItems();
-            setHasLoadedOnce(true);
-        })();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    // Refetch on focus when the data is older than ~60 s; pull-to-refresh always refetches.
+    const { refresh, refreshing, hasLoadedOnce } = useFocusRefresh(fetchAllShoppingListItems);
 
     useEffect(() => {
         return () => {
@@ -388,6 +386,10 @@ export default function ShoppingListScreen() {
                     </View>
                 )}
 
+                {errorByResource?.shopping ? (
+                    <ErrorBanner testID="shopping-load-error" onRetry={() => void refresh()} />
+                ) : null}
+
                 {pendingSyncItems.length > 0 && (
                     <TouchableOpacity
                         onPress={openReviewSheet}
@@ -440,6 +442,9 @@ export default function ShoppingListScreen() {
                             keyExtractor={(item) => item.id.toString()}
                             contentContainerStyle={{ padding: 12 }}
                             drawDistance={DRAW_DISTANCE}
+                            refreshControl={
+                                <RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />
+                            }
                         />
                     )}
                 </View>
