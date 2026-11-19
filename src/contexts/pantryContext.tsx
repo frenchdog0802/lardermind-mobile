@@ -66,6 +66,22 @@ const DEFAULT_RESOURCE_LOADING: ResourceLoading = {
     ingredients: false,
 };
 
+type ResourceError = Record<keyof ResourceLoading, boolean>;
+
+const DEFAULT_RESOURCE_ERROR: ResourceError = {
+    recipes: false,
+    pantry: false,
+    shopping: false,
+    mealPlan: false,
+    ingredients: false,
+};
+
+const DEFAULT_USER_SETTINGS: UserSettings = {
+    name: '',
+    language: 'english',
+    measurement_unit: 'metric',
+};
+
 function asList<T>(value: unknown): T[] {
     return Array.isArray(value) ? value : [];
 }
@@ -211,6 +227,8 @@ interface PantryContextType {
     /** True if any resource fetch is in flight */
     loading: boolean;
     loadingByResource: ResourceLoading;
+    /** True for a resource whose last fetch failed (network/server). Cleared on next success. */
+    errorByResource: ResourceError;
 }
 
 const PantryContext = createContext<PantryContextType | undefined>(undefined);
@@ -224,7 +242,10 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
     const { user } = useAuth();
     const userId = user?.id ?? '';
     const [loadingByResource, setLoadingByResource] = useState<ResourceLoading>(DEFAULT_RESOURCE_LOADING);
+    const [errorByResource, setErrorByResource] = useState<ResourceError>(DEFAULT_RESOURCE_ERROR);
     const loading = Object.values(loadingByResource).some(Boolean);
+    const userIdRef = useRef(userId);
+    userIdRef.current = userId;
     const [mealPlan, setMealPlan] = useState<MealPlan[]>([]);
     const [ingredients, setIngredients] = useState<IngredientEntry[]>([]);
     const ingredientsRef = useRef(ingredients);
@@ -235,15 +256,36 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
     const [shoppingListSyncStatus, setShoppingListSyncStatus] =
         useState<ShoppingListSyncStatus>(DEFAULT_SYNC_STATUS);
     const [recipes, setRecipes] = useState<Recipe[]>([]);
-    const [userSettings, setUserSettings] = useState<UserSettings>({
-        name: '',
-        language: 'english',
-        measurement_unit: 'metric',
-    });
+    const [userSettings, setUserSettings] = useState<UserSettings>(DEFAULT_USER_SETTINGS);
 
     const setResourceLoading = useCallback((key: keyof ResourceLoading, value: boolean) => {
         setLoadingByResource((prev) => (prev[key] === value ? prev : { ...prev, [key]: value }));
     }, []);
+
+    const setResourceError = useCallback((key: keyof ResourceLoading, value: boolean) => {
+        setErrorByResource((prev) => (prev[key] === value ? prev : { ...prev, [key]: value }));
+    }, []);
+
+    // Reset ALL per-user state whenever the signed-in user changes (sign-out, account
+    // switch, account deletion) so nothing from a previous account can leak into the next.
+    useEffect(() => {
+        setRecipes([]);
+        setPantryItems([]);
+        setShoppingList([]);
+        setIngredients([]);
+        setMealPlan([]);
+        setFolders(DEFAULT_FOLDERS);
+        setUserSettings(DEFAULT_USER_SETTINGS);
+        setLoadingByResource(DEFAULT_RESOURCE_LOADING);
+        setErrorByResource(DEFAULT_RESOURCE_ERROR);
+        setShoppingListSyncStatus((prev) => ({
+            ...prev,
+            pendingCount: 0,
+            isSyncing: false,
+            lastSyncError: null,
+            lastSyncedAt: null,
+        }));
+    }, [userId]);
 
     const updateSyncStatus = useCallback((patch: Partial<ShoppingListSyncStatus>) => {
         setShoppingListSyncStatus((prev) => ({ ...prev, ...patch }));
@@ -353,22 +395,27 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
 
     // === FOLDER FUNCTIONS ===
     const fetchAllFolders = useCallback(async () => {
+        const uid = userIdRef.current;
         setResourceLoading('recipes', true);
         try {
             const response = await folderApi.list();
+            if (uid !== userIdRef.current) return;
             if (response.success && response.data) {
                 const fetchedFolders = unwrapListResponse(
                     response.data as Folder[] | { folders?: Folder[] },
                     'folders',
                 );
                 setFolders(fetchedFolders.length > 0 ? fetchedFolders : DEFAULT_FOLDERS);
+            } else if (!response.success) {
+                setResourceError('recipes', true);
             }
         } catch (error) {
             console.error('Failed to fetch folders:', error);
+            setResourceError('recipes', true);
         } finally {
             setResourceLoading('recipes', false);
         }
-    }, [setResourceLoading]);
+    }, [setResourceLoading, setResourceError]);
 
     const addFolder = useCallback(async (folder: Partial<Folder>): Promise<ApiResponse<Folder>> => {
         const response = await folderApi.create(folder);
@@ -406,24 +453,29 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
 
     // === RECIPE FUNCTIONS ===
     const fetchAllRecipes = useCallback(async (): Promise<Recipe[]> => {
+        const uid = userIdRef.current;
         setResourceLoading('recipes', true);
         try {
             const response = await recipeApi.list();
+            if (uid !== userIdRef.current) return [];
             if (response.success && response.data) {
                 const data = response.data as Recipe[] | { recipes?: Recipe[] };
                 const recipesList = unwrapListResponse(data, 'recipes').map((recipe) =>
                     normalizeRecipe(recipe as unknown as Record<string, unknown>)
                 );
                 setRecipes(asList(recipesList));
+                setResourceError('recipes', false);
                 return recipesList;
             }
+            if (!response.success) setResourceError('recipes', true);
         } catch (error) {
             console.error('Failed to fetch recipes:', error);
+            setResourceError('recipes', true);
         } finally {
             setResourceLoading('recipes', false);
         }
         return [];
-    }, [setResourceLoading]);
+    }, [setResourceLoading, setResourceError]);
 
     const addRecipe = useCallback(async (recipe: Partial<Recipe>): Promise<ApiResponse<Recipe>> => {
         const response = await recipeApi.create(serializeRecipePayload(recipe) as Partial<Recipe>);
@@ -461,23 +513,30 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
 
     // === PANTRY ITEM FUNCTIONS ===
     const fetchAllPantryItems = useCallback(async () => {
+        const uid = userIdRef.current;
         setResourceLoading('pantry', true);
         try {
             const response = await pantryItemApi.list();
+            if (uid !== userIdRef.current) return;
             if (response.success && response.data) {
                 const parsed = parsePantryItems(response.data);
                 setPantryItems(
                     asList(enrichPantryNames(parsed, ingredientsRef.current)),
                 );
+                setResourceError('pantry', false);
             } else if (response.success) {
                 setPantryItems([]);
+                setResourceError('pantry', false);
+            } else {
+                setResourceError('pantry', true);
             }
         } catch (error) {
             console.error('Failed to fetch pantry items:', error);
+            setResourceError('pantry', true);
         } finally {
             setResourceLoading('pantry', false);
         }
-    }, [setResourceLoading]);
+    }, [setResourceLoading, setResourceError]);
 
     const addPantryItem = useCallback(async (item: Partial<PantryItem>): Promise<ApiResponse<PantryItem>> => {
         const response = await pantryItemApi.create(item);
@@ -551,9 +610,12 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
 
     // === INGREDIENT FUNCTIONS ===
     const fetchAllIngredients = useCallback(async (query?: string | null) => {
+        const uid = userIdRef.current;
         setResourceLoading('ingredients', true);
         try {
             const response = await ingredientApi.list(query || undefined);
+            if (uid !== userIdRef.current) return;
+            setResourceError('ingredients', !response.success);
             if (response.success && response.data) {
                 const next = unwrapListResponse(
                     response.data as IngredientEntry[] | { ingredients?: IngredientEntry[] },
@@ -568,10 +630,11 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
             }
         } catch (error) {
             console.error('Failed to fetch ingredients:', error);
+            setResourceError('ingredients', true);
         } finally {
             setResourceLoading('ingredients', false);
         }
-    }, [setResourceLoading]);
+    }, [setResourceLoading, setResourceError]);
 
     // Ensure ingredient catalog is available for name backfill on pantry/shopping.
     useEffect(() => {
@@ -608,6 +671,7 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
                 const enriched = enrichShoppingNames(merged, ingredientsRef.current);
                 setShoppingList(asList(enriched));
                 await saveSnapshot(userId, enriched);
+                setResourceError('shopping', false);
                 const queue = await loadQueue(userId);
                 updateSyncStatus({
                     pendingCount: queue.length,
@@ -624,14 +688,16 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
                 await saveSnapshot(userId, []);
                 return [];
             }
+            setResourceError('shopping', true);
             return cached;
         } catch (error) {
             console.error('Failed to fetch shopping list:', error);
+            setResourceError('shopping', true);
             return cached;
         } finally {
             setResourceLoading('shopping', false);
         }
-    }, [userId, shoppingList, updateSyncStatus, runFlush, setResourceLoading]);
+    }, [userId, shoppingList, updateSyncStatus, runFlush, setResourceLoading, setResourceError]);
 
     const updateShoppingListItem = useCallback(async (item: ShoppingListItem): Promise<ApiResponse<ShoppingListItem>> => {
         return shoppingWriteRef.current(async () => {
@@ -794,9 +860,12 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
 
     // === MEAL PLAN FUNCTIONS ===
     const fetchAllMealPlans = useCallback(async (): Promise<MealPlan[]> => {
+        const uid = userIdRef.current;
         setResourceLoading('mealPlan', true);
         try {
             const response = await mealPlanApi.list();
+            if (uid !== userIdRef.current) return [];
+            setResourceError('mealPlan', !response.success);
             if (response.success && response.data) {
                 const list = unwrapListResponse(
                     response.data as MealPlan[] | { mealPlans?: MealPlan[] },
@@ -807,11 +876,12 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
             }
         } catch (error) {
             console.error('Failed to fetch meal plans:', error);
+            setResourceError('mealPlan', true);
         } finally {
             setResourceLoading('mealPlan', false);
         }
         return [];
-    }, [setResourceLoading]);
+    }, [setResourceLoading, setResourceError]);
 
     const addMealPlan = useCallback(async (newMealPlan: Partial<MealPlan>): Promise<ApiResponse<MealPlan>> => {
         const response = await mealPlanApi.create(newMealPlan);
@@ -873,6 +943,7 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
         () => ({
             loading,
             loadingByResource,
+            errorByResource,
             recipes: asList(recipes),
             pantryItems: asList(pantryItems),
             shoppingList: asList(shoppingList),
@@ -914,6 +985,7 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
         [
             loading,
             loadingByResource,
+            errorByResource,
             recipes,
             pantryItems,
             shoppingList,
