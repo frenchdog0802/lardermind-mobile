@@ -247,8 +247,7 @@ export default function AICookingAssistantScreen() {
     );
 
     /**
-     * Load a conversation. With no target: bootstrap (sessions list + default history in
-     * parallel). Failures show an error state with Retry instead of an empty chat.
+     * Load a conversation. With no target: bootstrap (sessions list, then that session's history). Failures show an error state with Retry instead of an empty chat.
      */
     const loadConversation = useCallback(
         async (target?: string) => {
@@ -263,24 +262,27 @@ export default function AICookingAssistantScreen() {
                 if (target) {
                     response = await chatApi.getHistory(target);
                 } else {
-                    const [sessionsRes, defaultHistory] = await Promise.all([
-                        chatApi.listSessions(),
-                        chatApi.getHistory(),
-                    ]);
+                    // The history endpoint requires a sessionId, so the list must come first.
+                    const sessionsRes = await chatApi.listSessions();
+                    if (seq !== loadSeqRef.current) return;
+                    if (!sessionsRes.success) {
+                        loadErrorRef.current = true;
+                        setLoadError(true);
+                        setMessages([]);
+                        setPendingApproval(null);
+                        return;
+                    }
                     const list = sessionsRes.data?.sessions ?? [];
                     const initialId = list.find((s) => s.isDefault)?.id ?? list[0]?.id ?? null;
-                    sid = initialId;
-                    response = defaultHistory;
-                    // Only re-fetch when the server's implicit default differs from the chosen session.
-                    if (
-                        seq === loadSeqRef.current &&
-                        initialId &&
-                        defaultHistory.success &&
-                        defaultHistory.data?.sessionId &&
-                        defaultHistory.data.sessionId !== initialId
-                    ) {
-                        response = await chatApi.getHistory(initialId);
+                    if (!initialId) {
+                        // Brand-new user (e.g. a fresh guest): no conversation yet, show the empty chat.
+                        setActiveSessionId(null);
+                        setMessages([]);
+                        setPendingApproval(null);
+                        return;
                     }
+                    sid = initialId;
+                    response = await chatApi.getHistory(initialId);
                 }
                 if (seq !== loadSeqRef.current) return;
                 if (!response.success || !response.data) {
