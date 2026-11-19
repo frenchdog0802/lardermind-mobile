@@ -139,6 +139,15 @@ export default function LoginScreen({ onLoginSuccess, onSignUp }: LoginProps = {
                 </View>
                 <Text className="text-sm text-ink">{t('auth.rememberMe')}</Text>
               </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('ForgotPassword' as never)}
+                disabled={submitting}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityRole="link"
+                testID="login-forgot-password"
+              >
+                <Text className="text-sm text-herb font-medium">{t('auth.forgotPassword')}</Text>
+              </TouchableOpacity>
             </View>
 
             <PrimaryButton
