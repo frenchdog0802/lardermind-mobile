@@ -8,6 +8,8 @@ export interface ApiResponse<T = unknown> {
     message?: string;
     data?: T;
     statusCode?: number;
+    /** Machine-readable error code on some failures (e.g. `reset_token_invalid`). */
+    code?: string;
 }
 
 export type User = {

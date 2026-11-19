@@ -8,6 +8,8 @@ import { GoogleSignInError, signInForIdToken } from '../services/googleSignIn';
 
 import { clearUserOfflineData, clearBackoff } from '../services/shoppingListOffline';
 
+const OFFLINE_OWNER_KEY = '@lardermind/offline-owner';
+
 export interface AuthResponse {
     success: boolean;
     message?: string;
@@ -26,6 +28,8 @@ interface AuthContextType {
     loginWithGoogle: () => Promise<AuthResponse>;
     continueAsGuest: () => Promise<AuthResponse>;
     logout: () => Promise<void>;
+    /** Permanently deletes the account on the server, then clears session + offline data. */
+    deleteAccount: () => Promise<AuthResponse>;
     isAuthenticated: boolean;
     isGuest: boolean;
 }
@@ -39,25 +43,55 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const userRef = useRef<User | null>(null);
     userRef.current = user;
 
-    const logout = useCallback(async (): Promise<void> => {
-        const previousUserId = userRef.current?.id;
+    /**
+     * Session expired / rejected (HTTP 401): drop JWT + user only. The offline
+     * shopping snapshot/queue is deliberately kept so pending edits can flush
+     * after the same user signs in again. A different user signing in later
+     * causes the old data to be cleared (see persistSession).
+     */
+    const expireSession = useCallback(async (): Promise<void> => {
         setUser(null);
         await authHelper.clearJWT();
         await AsyncStorage.removeItem('user');
+    }, []);
+
+    /** Explicit user sign-out: also wipes this user's offline data. */
+    const logout = useCallback(async (): Promise<void> => {
+        const previousUserId = userRef.current?.id;
+        await expireSession();
         if (previousUserId) {
             clearBackoff(previousUserId);
             await clearUserOfflineData(previousUserId);
         }
-    }, []);
+        try {
+            await AsyncStorage.removeItem(OFFLINE_OWNER_KEY);
+        } catch {
+            // ignore
+        }
+    }, [expireSession]);
+
+    const deleteAccount = useCallback(async (): Promise<AuthResponse> => {
+        try {
+            const response = await auth.deleteAccount();
+            if (!response?.success) {
+                return { success: false, message: response?.message || 'Could not delete account' };
+            }
+            await logout();
+            return { success: true };
+        } catch (error) {
+            console.error('Error deleting account:', error);
+            return { success: false, message: 'Could not delete account' };
+        }
+    }, [logout]);
 
     useEffect(() => {
         setUnauthorizedHandler(() => {
-            void logout();
+            void expireSession();
         });
         return () => {
             setUnauthorizedHandler(null);
         };
-    }, [logout]);
+    }, [expireSession]);
 
     useEffect(() => {
         const checkAuth = async () => {
@@ -93,6 +127,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, []);
 
     const persistSession = async (token: string, nextUser: User): Promise<void> => {
+        // If a different user signs in than the one whose offline data is on this
+        // device, wipe the previous user's snapshot/queue so nothing leaks across accounts.
+        try {
+            const ownerId = await AsyncStorage.getItem(OFFLINE_OWNER_KEY);
+            if (ownerId && nextUser.id && ownerId !== nextUser.id) {
+                clearBackoff(ownerId);
+                await clearUserOfflineData(ownerId);
+            }
+            if (nextUser.id) await AsyncStorage.setItem(OFFLINE_OWNER_KEY, nextUser.id);
+        } catch {
+            // non-fatal
+        }
         await authHelper.authenticate(token);
         setUser(nextUser);
         await AsyncStorage.setItem('user', JSON.stringify(nextUser));
@@ -254,11 +300,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             loginWithGoogle,
             continueAsGuest,
             logout,
+            deleteAccount,
             isAuthenticated: !!user,
             isGuest,
             signUp,
         }),
-        [user, initializing, submitting, logout, isGuest],
+        [user, initializing, submitting, logout, deleteAccount, isGuest],
     );
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -55,4 +55,19 @@ export const auth = {
     mintGuest: (): Promise<ApiResponse<GuestMintData>> => {
         return api.post<GuestMintData>('auth/guest', {});
     },
+
+    /** Permanently delete the authenticated account (Apple 5.1.1(v)). */
+    deleteAccount: (): Promise<ApiResponse<null>> => {
+        return api.delete<null>('auth/account');
+    },
+
+    /** Always answers with a generic success (429 when rate limited). */
+    requestPasswordReset: (email: string): Promise<ApiResponse<unknown>> => {
+        return api.post<unknown>('auth/password-reset/request', { email });
+    },
+
+    /** 400 with code `reset_token_invalid` when the token is wrong/expired. */
+    confirmPasswordReset: (token: string, password: string): Promise<ApiResponse<unknown>> => {
+        return api.post<unknown>('auth/password-reset/confirm', { token, password });
+    },
 };
