@@ -21,7 +21,17 @@ TAG_ARGS=()
 if [ -n "$EXCLUDE" ]; then TAG_ARGS+=(--exclude-tags="$EXCLUDE"); fi
 
 mkdir -p maestro-out
-maestro test "${ENV_ARGS[@]}" "${TAG_ARGS[@]}" \
-  --format=junit --output=maestro-out/report.xml \
-  --debug-output=maestro-out/debug \
-  .maestro
+
+set +e
+maestro test "${ENV_ARGS[@]}" "${TAG_ARGS[@]}"   --format=junit --output=maestro-out/report.xml   --debug-output=maestro-out/debug   .maestro
+STATUS=$?
+set -e
+
+if [ "$STATUS" -ne 0 ]; then
+  echo "[ci-e2e] Maestro failed (exit $STATUS); collecting diagnostics"
+  adb exec-out screencap -p > maestro-out/final-screen.png || true
+  adb logcat -d -t 3000 > maestro-out/logcat.txt || true
+  adb shell dumpsys activity activities 2>/dev/null | grep -E "mResumedActivity|topResumedActivity" > maestro-out/resumed-activity.txt || true
+  cp -r "$HOME/.maestro/tests" maestro-out/maestro-tests 2>/dev/null || true
+fi
+exit "$STATUS"
