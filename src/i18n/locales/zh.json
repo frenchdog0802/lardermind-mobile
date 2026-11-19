@@ -158,7 +158,16 @@
     "languageHint": "選擇應用程式顯示語言。",
     "langEn": "English",
     "langZh": "中文",
-    "signOut": "登出"
+    "signOut": "登出",
+    "deleteAccount": "刪除帳號",
+    "deleteAccountHint": "永久刪除你的帳號與所有資料，包括食材庫存、食譜、餐點規劃、購物清單與聊天紀錄。此操作無法復原。",
+    "deleteAccountHintGuest": "永久刪除這個訪客工作階段及其中所有內容。此操作無法復原。",
+    "deleteAccountConfirmTitle": "要刪除你的帳號嗎？",
+    "deleteAccountConfirmMessage": "這會永久刪除你的帳號與所有資料，且無法復原。",
+    "deleteAccountConfirmGuest": "這會永久刪除此訪客工作階段及其所有資料，且無法復原。",
+    "deleteAccountConfirmAction": "刪除",
+    "deleteAccountError": "無法刪除帳號，請檢查網路連線後再試一次。",
+    "deleting": "刪除中…"
   },
   "calendar": {
     "title": "烹飪行事曆",

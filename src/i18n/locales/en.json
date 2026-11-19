@@ -158,7 +158,16 @@
     "languageHint": "Choose the display language for the app.",
     "langEn": "English",
     "langZh": "中文",
-    "signOut": "Sign Out"
+    "signOut": "Sign Out",
+    "deleteAccount": "Delete account",
+    "deleteAccountHint": "Permanently delete your account and all of your data, including pantry, recipes, meal plans, shopping lists and chat history. This cannot be undone.",
+    "deleteAccountHintGuest": "Permanently delete this guest session and everything in it. This cannot be undone.",
+    "deleteAccountConfirmTitle": "Delete your account?",
+    "deleteAccountConfirmMessage": "This permanently deletes your account and all of your data. This cannot be undone.",
+    "deleteAccountConfirmGuest": "This permanently deletes this guest session and all of its data. This cannot be undone.",
+    "deleteAccountConfirmAction": "Delete",
+    "deleteAccountError": "Could not delete your account. Please check your connection and try again.",
+    "deleting": "Deleting…"
   },
   "calendar": {
     "title": "Cooking Calendar",

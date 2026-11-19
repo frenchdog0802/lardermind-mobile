@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Languages } from 'lucide-react-native';
 import { useAuth } from '../contexts/authContext';
@@ -13,7 +13,7 @@ import i18n, { AppLanguage, persistLanguage } from '../i18n';
 
 export default function SettingsScreen() {
   const { t } = useTranslation();
-  const { logout, user } = useAuth();
+  const { logout, deleteAccount, user, isGuest } = useAuth();
   const { userSettings, updateUserSettings } = usePantry();
   const navigation = useNavigation();
 
@@ -29,6 +29,8 @@ export default function SettingsScreen() {
   const [email, setEmail] = useState(user?.email || '');
   const [showSaveMessage, setShowSaveMessage] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -56,6 +58,38 @@ export default function SettingsScreen() {
 
   const handleLogout = async () => {
     await logout();
+  };
+
+  const runDeleteAccount = async () => {
+    setDeleteError('');
+    setDeleting(true);
+    try {
+      const result = await deleteAccount();
+      if (!result.success) {
+        setDeleteError(result.message || t('settings.deleteAccountError'));
+        setDeleting(false);
+      }
+      // On success the session is cleared and navigation returns to the auth screen.
+    } catch {
+      setDeleteError(t('settings.deleteAccountError'));
+      setDeleting(false);
+    }
+  };
+
+  const handleDeleteAccount = () => {
+    if (deleting) return;
+    Alert.alert(
+      t('settings.deleteAccountConfirmTitle'),
+      isGuest ? t('settings.deleteAccountConfirmGuest') : t('settings.deleteAccountConfirmMessage'),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('settings.deleteAccountConfirmAction'),
+          style: 'destructive',
+          onPress: () => void runDeleteAccount(),
+        },
+      ],
+    );
   };
 
   const applyLanguage = async (lng: AppLanguage) => {
@@ -118,7 +152,13 @@ export default function SettingsScreen() {
   return (
     <View className="flex-1 bg-linen">
             <AppHeader title={t('settings.title')} showMenuButton />
-      <ScrollView className="flex-1">
+      <ScrollView
+        className="flex-1"
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+        automaticallyAdjustKeyboardInsets
+        contentContainerStyle={{ paddingBottom: 32 }}
+      >
         <View className="p-4">
           <View className="bg-surface rounded-xl overflow-hidden border border-line">
             <View className="flex-row border-b border-line">
@@ -314,6 +354,36 @@ export default function SettingsScreen() {
           >
             <Text className="text-ink text-center font-medium">{t('settings.signOut')}</Text>
           </TouchableOpacity>
+
+          <View className="mt-8 border border-line rounded-xl bg-surface p-4" testID="delete-account-section">
+            <Text className="text-lg font-semibold text-ink mb-1">
+              {t('settings.deleteAccount')}
+            </Text>
+            <Text className="text-sm text-muted mb-4">
+              {isGuest ? t('settings.deleteAccountHintGuest') : t('settings.deleteAccountHint')}
+            </Text>
+            {deleteError ? (
+              <Text className="text-sm mb-3" style={{ color: colors.danger }} testID="delete-account-error">
+                {deleteError}
+              </Text>
+            ) : null}
+            <TouchableOpacity
+              onPress={handleDeleteAccount}
+              disabled={deleting}
+              accessibilityRole="button"
+              className="py-3 rounded-lg items-center flex-row justify-center"
+              style={{ borderWidth: 1, borderColor: colors.danger, opacity: deleting ? 0.6 : 1 }}
+              testID="delete-account-button"
+            >
+              {deleting ? <ActivityIndicator size="small" color={colors.danger} /> : null}
+              <Text
+                className={`font-medium ${deleting ? 'ml-2' : ''}`}
+                style={{ color: colors.danger }}
+              >
+                {deleting ? t('settings.deleting') : t('settings.deleteAccount')}
+              </Text>
+            </TouchableOpacity>
+          </View>
 
           {showSaveMessage ? (
             <View className="absolute bottom-4 left-4 right-4 bg-sage border border-line p-4 rounded-lg flex-row items-center">
