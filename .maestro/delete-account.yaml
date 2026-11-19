@@ -1,0 +1,36 @@
+appId: com.lardermind.app
+tags:
+  - needs-new-backend
+---
+# Apple 5.1.1(v): a guest can delete the account from Settings and is returned to sign-in.
+# Needs the backend with DELETE /api/auth/account (migration 0013) on the API the build points at.
+- clearState
+- stopApp
+- runFlow:
+    file: subflows/guest-session.yaml
+- tapOn:
+    id: "header-menu"
+- tapOn:
+    id: "drawer-settings"
+- extendedWaitUntil:
+    visible: "Settings"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "delete-account-button"
+    timeout: 20000
+- tapOn:
+    id: "delete-account-button"
+- assertVisible: "Delete your account?"
+- tapOn: "Delete"
+- extendedWaitUntil:
+    visible:
+      id: "login-email"
+    timeout: 30000
+# The deleted guest must not be able to come back with its old session.
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "login-email"
+    timeout: 60000

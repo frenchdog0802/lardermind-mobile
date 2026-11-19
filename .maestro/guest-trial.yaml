@@ -1,0 +1,20 @@
+appId: com.lardermind.app
+tags:
+  - guest
+---
+# Guest trial: "Try without an account" opens the app with no sign-up, and the drawer works.
+- clearState
+- stopApp
+- runFlow:
+    file: subflows/guest-session.yaml
+- assertVisible:
+    id: "chat-empty-state"
+- tapOn:
+    id: "header-menu"
+- assertVisible:
+    id: "drawer-settings"
+- tapOn:
+    id: "drawer-settings"
+- extendedWaitUntil:
+    visible: "Settings"
+    timeout: 10000

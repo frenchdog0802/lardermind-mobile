@@ -50,3 +50,13 @@ npm run verify:all
 - [ ] `npm run verify` passes
 - [ ] Emulator running with dev build installed
 - [ ] `npm run test:e2e` passes with test account
+
+
+## Guest flows and CI (no account needed)
+
+- `guest-trial.yaml`, `forgot-password.yaml` use the "Try without an account" guest session or only on-device validation, so they need no secrets.
+- `delete-account.yaml` (tag `needs-new-backend`) needs the backend with `DELETE /api/auth/account` (migration 0013) on the API the build points at.
+- Flows tagged `auth` (`smoke`, `shopping-add`, `recipe-add`, `bottom-nav-last-tab`) need `EMAIL` / `PASSWORD`.
+- Run the guest flows locally: `npm run test:e2e:guest`.
+- CI (`.github/workflows/mobile.yml`): `verify` (tsc + jest), then `e2e-android` builds a release APK with the JS bundle embedded, boots an Android emulator and runs Maestro. Set repo secrets `E2E_EMAIL` / `E2E_PASSWORD` to also run the `auth` flows; use "Run workflow" with `include_new_backend_flows` once staging has the new backend.
+- Maestro only drives Android here. iOS-specific behaviour (keyboard avoidance, iPad full screen) is verified manually on TestFlight.

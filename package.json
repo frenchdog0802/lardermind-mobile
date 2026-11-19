@@ -14,6 +14,7 @@
     "test:e2e": "node scripts/run-e2e.js",
     "test:e2e:bottom-nav": "maestro test .maestro/bottom-nav-last-tab.yaml",
     "test:e2e:smoke": "maestro test .maestro/smoke.yaml",
+    "test:e2e:guest": "maestro test --exclude-tags=auth,needs-new-backend .maestro",
     "verify": "npm run test",
     "verify:strict": "npm run verify:types && npm run test",
     "verify:types": "tsc --noEmit",

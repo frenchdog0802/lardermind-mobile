@@ -1,5 +1,7 @@
 # Legacy: bottom tabs removed — open last drawer destinations via menu.
 appId: com.lardermind.app
+tags:
+  - auth
 ---
 - stopApp
 - runFlow:

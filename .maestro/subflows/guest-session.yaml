@@ -1,0 +1,11 @@
+appId: com.lardermind.app
+---
+# Start a guest trial session (no account / secrets needed) and land on the main chat screen.
+- runFlow:
+    file: connect-dev-server.yaml
+- tapOn:
+    id: "login-try-guest"
+- extendedWaitUntil:
+    visible:
+      id: "header-menu"
+    timeout: 60000
