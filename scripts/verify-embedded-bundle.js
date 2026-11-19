@@ -25,12 +25,24 @@ const extractDir = path.join(require('os').tmpdir(), 'lardermind-apk-check');
 fs.mkdirSync(extractDir, { recursive: true });
 const bundlePath = path.join(extractDir, 'assets', 'index.android.bundle');
 
-try {
-  execSync(`tar -xf "${apkPath}" -C "${extractDir}" assets/index.android.bundle`, {
-    stdio: 'pipe',
-    shell: true,
-  });
-} catch (err) {
+// An APK is a zip. bsdtar (Windows/macOS) can read it; GNU tar (Linux CI) cannot, so fall back to unzip.
+const extractors = [
+  `tar -xf "${apkPath}" -C "${extractDir}" assets/index.android.bundle`,
+  `unzip -o -q "${apkPath}" assets/index.android.bundle -d "${extractDir}"`,
+];
+let extracted = false;
+for (const cmd of extractors) {
+  try {
+    execSync(cmd, { stdio: 'pipe', shell: true });
+    if (fs.existsSync(bundlePath)) {
+      extracted = true;
+      break;
+    }
+  } catch {
+    // try the next extractor
+  }
+}
+if (!extracted) {
   console.error('[e2e] Failed to extract assets/index.android.bundle from APK');
   process.exit(1);
 }
@@ -41,7 +53,7 @@ if (!fs.existsSync(bundlePath)) {
 }
 
 const bytes = fs.readFileSync(bundlePath);
-const markers = ['shoppingList', 'itemsToBuy', 'home-screen'];
+const markers = ['shoppingList', 'itemsToBuy', 'login-try-guest', 'delete-account-button'];
 const found = markers.filter((m) => {
   const needle = Buffer.from(m, 'utf8');
   return bytes.includes(needle);
