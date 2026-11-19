@@ -2,6 +2,7 @@ import { fetch as expoFetch } from 'expo/fetch';
 import { api, notifyUnauthorized } from './client';
 import { authHelper } from './auth-helper';
 import { ApiResponse } from '../types';
+import { currentChatLanguage } from '../utils/chatLanguage';
 
 export type ChatResponseType =
     | 'text'
@@ -26,6 +27,8 @@ export interface ChatRequest {
         recipeId: string;
         recipeName: string;
     };
+    /** App UI language ('en' | 'zh-TW'). Optional; older servers ignore it. */
+    language?: string;
 }
 
 function localCalendarDate(): string {
@@ -43,12 +46,26 @@ function withClientLocalDate<T extends object>(data: T): T & { clientLocalDate: 
     };
 }
 
+/**
+ * Add the app language so the assistant replies in it. An explicit
+ * `language` from the caller wins; when the app language is unknown the key
+ * is left out entirely (not sent as null/undefined).
+ */
+export function withChatLanguage<T extends { language?: string }>(data: T): T {
+    if (data.language) return data;
+    const { language: _omit, ...rest } = data;
+    const language = currentChatLanguage();
+    return (language ? { ...rest, language } : rest) as T;
+}
+
 export interface ChatResumeRequest {
     sessionId: string;
     decision: 'approve' | 'reject';
     note?: string;
     /** Id of the approval card on screen. Omit to act on whatever is pending. */
     interruptId?: string;
+    /** App UI language ('en' | 'zh-TW'). Optional; older servers ignore it. */
+    language?: string;
 }
 
 export interface ChatResponseData {
@@ -268,11 +285,11 @@ export const chatApi = {
             sessionId: options?.sessionId,
             recipeContext: options?.recipeContext,
         };
-        return api.post<ChatResponseData>('chat/send', withClientLocalDate(body));
+        return api.post<ChatResponseData>('chat/send', withChatLanguage(withClientLocalDate(body)));
     },
 
     resume: (body: ChatResumeRequest) =>
-        api.post<ChatResponseData>('chat/resume', body),
+        api.post<ChatResponseData>('chat/resume', withChatLanguage(body)),
 
     streamSend: async (
         data: ChatRequest,
@@ -300,7 +317,7 @@ export const chatApi = {
                 Accept: 'text/event-stream',
                 ...(token ? { Authorization: `Bearer ${token}` } : {}),
             },
-            body: JSON.stringify(withClientLocalDate(data)),
+            body: JSON.stringify(withChatLanguage(withClientLocalDate(data))),
             signal,
         });
 
