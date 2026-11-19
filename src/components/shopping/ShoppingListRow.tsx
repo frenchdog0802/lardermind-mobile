@@ -42,7 +42,7 @@ function ShoppingListRowComponent({
         item.checked ? 'opacity-70' : ''
       }`}
     >
-      <Pressable
+      <Pressable hitSlop={6}
         onPress={() => onToggle(item.id)}
         style={{ marginRight: 16 }}
         accessibilityRole="checkbox"
@@ -78,7 +78,7 @@ function ShoppingListRowComponent({
       </View>
 
       <View className="flex-row items-center gap-1.5 mr-2" style={{ flexShrink: 0 }}>
-        <Pressable
+        <Pressable hitSlop={6}
           onPress={() => onUpdateQuantity(item, -0.5)}
           style={{
             backgroundColor: colors.linen,
@@ -100,7 +100,7 @@ function ShoppingListRowComponent({
           defaultDisplayUnit={item.default_display_unit}
         />
 
-        <Pressable
+        <Pressable hitSlop={6}
           onPress={() => onUpdateQuantity(item, 0.5)}
           style={{
             backgroundColor: colors.linen,
@@ -114,7 +114,7 @@ function ShoppingListRowComponent({
         </Pressable>
       </View>
 
-      <Pressable
+      <Pressable hitSlop={6}
         onPress={() => onRemove(item.id)}
         style={{ padding: 8 }}
         accessibilityRole="button"

@@ -32,7 +32,7 @@ function PantryItemRowComponent({
       </View>
 
       <View className="flex-row items-center gap-1.5 mr-2" style={{ flexShrink: 0 }}>
-        <Pressable
+        <Pressable hitSlop={6}
           onPress={() => onUpdateQuantity(item, -0.5)}
           style={{
             backgroundColor: colors.linen,
@@ -62,7 +62,7 @@ function PantryItemRowComponent({
           }}
         />
 
-        <Pressable
+        <Pressable hitSlop={6}
           onPress={() => onUpdateQuantity(item, 0.5)}
           style={{ backgroundColor: colors.herb, padding: 8, borderRadius: 8 }}
         >
@@ -70,7 +70,7 @@ function PantryItemRowComponent({
         </Pressable>
       </View>
 
-      <Pressable onPress={() => onRemove(item.id)} style={{ padding: 8 }}>
+      <Pressable hitSlop={6} onPress={() => onRemove(item.id)} style={{ padding: 8 }}>
         <TrashIcon size={18} color={colors.danger} />
       </Pressable>
     </View>

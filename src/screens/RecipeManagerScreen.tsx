@@ -807,7 +807,7 @@ export default function RecipeManagerScreen() {
                 <View className="flex-1 p-4">
                     <View className="flex-row items-center mb-4">
                         {currentFolder && (
-                            <TouchableOpacity
+                            <TouchableOpacity hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                                 onPress={() => setCurrentFolder(null)}
                                 className="mr-2 p-1"
                                 accessibilityLabel="Back to categories"
@@ -921,7 +921,7 @@ export default function RecipeManagerScreen() {
                             <Text className="font-semibold text-ink">
                                 {isEditing ? 'Edit Recipe' : 'Recipe Details'}
                             </Text>
-                            <TouchableOpacity
+                            <TouchableOpacity hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                                 onPress={() => {
                                     setSelectedRecipe(null);
                                     setIsEditing(false);
@@ -968,7 +968,7 @@ export default function RecipeManagerScreen() {
                                                 style={{ width: '100%', height: 192, borderRadius: 12 }}
                                                 contentFit="cover"
                                             />
-                                            <TouchableOpacity
+                                            <TouchableOpacity hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                                                 onPress={() => {
                                                     void removeImage();
                                                 }}
@@ -1127,7 +1127,7 @@ export default function RecipeManagerScreen() {
                     <View className="bg-surface rounded-xl overflow-hidden border border-line">
                         <View className="p-4 border-b border-line bg-linen flex-row justify-between items-center">
                             <Text className="font-semibold text-ink">Add New Recipe</Text>
-                            <TouchableOpacity onPress={() => setShowAddRecipe(false)}>
+                            <TouchableOpacity hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} onPress={() => setShowAddRecipe(false)}>
                                 <XIcon size={20} color={colors.muted} />
                             </TouchableOpacity>
                         </View>
@@ -1166,7 +1166,7 @@ export default function RecipeManagerScreen() {
                                         style={{ width: '100%', height: 192, borderRadius: 12 }}
                                         contentFit="cover"
                                     />
-                                    <TouchableOpacity
+                                    <TouchableOpacity hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                                         onPress={() => {
                                             void removeImage();
                                         }}
@@ -1274,7 +1274,7 @@ export default function RecipeManagerScreen() {
                     <View className="bg-surface rounded-xl w-full max-w-sm border border-line">
                         <View className="p-4 border-b border-line flex-row justify-between items-center">
                             <Text className="font-medium text-ink">Create New Category</Text>
-                            <TouchableOpacity onPress={() => setShowAddFolder(false)}>
+                            <TouchableOpacity hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} onPress={() => setShowAddFolder(false)}>
                                 <XIcon size={20} color={colors.muted} />
                             </TouchableOpacity>
                         </View>
@@ -1322,7 +1322,7 @@ export default function RecipeManagerScreen() {
                     <View className="bg-surface rounded-xl w-full max-w-sm border border-line">
                         <View className="p-4 border-b border-line flex-row justify-between items-center">
                             <Text className="font-medium text-ink">Rename Category</Text>
-                            <TouchableOpacity onPress={() => setEditingFolder(null)}>
+                            <TouchableOpacity hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} onPress={() => setEditingFolder(null)}>
                                 <XIcon size={20} color={colors.muted} />
                             </TouchableOpacity>
                         </View>

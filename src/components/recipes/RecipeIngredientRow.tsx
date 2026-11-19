@@ -73,7 +73,7 @@ function RecipeIngredientRowComponent({
           textContentType="none"
           className="w-16 p-3 border border-line rounded-lg bg-linen text-ink text-center"
         />
-        <TouchableOpacity onPress={handleRemove} className="p-2">
+        <TouchableOpacity hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} onPress={handleRemove} className="p-2">
           <TrashIcon size={18} color={colors.danger} />
         </TouchableOpacity>
       </View>

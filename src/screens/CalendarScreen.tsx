@@ -418,15 +418,15 @@ export default function CalendarScreen() {
                                 <View className="flex-row items-center">
                                     {canActOnMeal(meal) && (
                                         <>
-                                            <TouchableOpacity onPress={() => handleConfirmMeal(meal)} className="p-2">
+                                            <TouchableOpacity hitSlop={{ top: 6, bottom: 6, left: 0, right: 0 }} onPress={() => handleConfirmMeal(meal)} className="p-2">
                                                 <Check size={16} color={colors.herb} />
                                             </TouchableOpacity>
-                                            <TouchableOpacity onPress={() => handleSkipMeal(meal)} className="p-2">
+                                            <TouchableOpacity hitSlop={{ top: 6, bottom: 6, left: 0, right: 0 }} onPress={() => handleSkipMeal(meal)} className="p-2">
                                                 <X size={16} color={colors.muted} />
                                             </TouchableOpacity>
                                         </>
                                     )}
-                                    <TouchableOpacity
+                                    <TouchableOpacity hitSlop={{ top: 6, bottom: 6, left: 0, right: 0 }}
                                         onPress={() => {
                                             setRecipeToDelete(meal);
                                             setShowDeleteConfirm(true);
@@ -613,13 +613,13 @@ export default function CalendarScreen() {
                                                         <View className="flex-row items-center">
                                                             {canActOnMeal(item) && (
                                                                 <>
-                                                                    <TouchableOpacity
+                                                                    <TouchableOpacity hitSlop={{ top: 6, bottom: 6, left: 0, right: 0 }}
                                                                         onPress={() => handleConfirmMeal(item)}
                                                                         className="p-2 mr-1"
                                                                     >
                                                                         <Check size={20} color={colors.herb} />
                                                                     </TouchableOpacity>
-                                                                    <TouchableOpacity
+                                                                    <TouchableOpacity hitSlop={{ top: 6, bottom: 6, left: 0, right: 0 }}
                                                                         onPress={() => handleSkipMeal(item)}
                                                                         className="p-2 mr-1"
                                                                     >
@@ -627,7 +627,7 @@ export default function CalendarScreen() {
                                                                     </TouchableOpacity>
                                                                 </>
                                                             )}
-                                                            <TouchableOpacity
+                                                            <TouchableOpacity hitSlop={{ top: 6, bottom: 6, left: 0, right: 0 }}
                                                                 onPress={() => {
                                                                     setRecipeToDelete(item);
                                                                     setShowDeleteConfirm(true);
@@ -811,7 +811,7 @@ export default function CalendarScreen() {
                             <Text className="text-xl font-bold text-ink flex-1 mr-3">
                                 {selectedRecipeDetail?.meal_name || 'Recipe'}
                             </Text>
-                            <TouchableOpacity
+                            <TouchableOpacity hitSlop={{ top: 6, bottom: 6, left: 0, right: 0 }}
                                 onPress={() => {
                                     setShowRecipeDetail(false);
                                     setSelectedRecipeDetail(null);

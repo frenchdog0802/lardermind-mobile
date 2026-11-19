@@ -15,6 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
+      "requireFullScreen": true,
       "bundleIdentifier": "com.lardermind.app",
       "appleTeamId": "535UF7UZS4",
       "infoPlist": {

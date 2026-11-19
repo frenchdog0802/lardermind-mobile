@@ -330,7 +330,7 @@ export default function ShoppingListScreen() {
                     <View className="bg-surface p-4 rounded-xl border border-line mb-4">
                         <View className="flex-row justify-between items-center mb-3">
                             <Text className="font-medium text-ink">{t('shopping.addItemTitle')}</Text>
-                            <TouchableOpacity onPress={() => setIsAddingItem(false)}>
+                            <TouchableOpacity hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} onPress={() => setIsAddingItem(false)}>
                                 <XIcon size={20} color={colors.muted} />
                             </TouchableOpacity>
                         </View>

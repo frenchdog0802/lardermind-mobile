@@ -56,7 +56,7 @@ export default function AppHeader({
     >
       <View className="flex-row items-center justify-between px-4 pb-3 border-b border-line">
         {showMenuButton ? (
-          <TouchableOpacity
+          <TouchableOpacity hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             onPress={handleMenu}
             testID="header-menu"
             accessibilityRole="button"
@@ -67,7 +67,7 @@ export default function AppHeader({
             <Menu size={24} color={colors.ink} />
           </TouchableOpacity>
         ) : showBackButton ? (
-          <TouchableOpacity
+          <TouchableOpacity hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             onPress={handleBack}
             className="w-10 h-10 items-center justify-center rounded-full"
             activeOpacity={0.7}

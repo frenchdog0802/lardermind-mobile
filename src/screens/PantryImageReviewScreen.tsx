@@ -6,13 +6,13 @@ import {
     TouchableOpacity,
     ScrollView,
     Alert,
-    Image,
     ActivityIndicator,
 } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { TrashIcon } from 'lucide-react-native';
 import AppHeader from '../components/AppHeader';
+import { CachedImage } from '../components/ui/CachedImage';
 import {
     pantryVisionApi,
     type RecognizedPantryItem,
@@ -114,10 +114,11 @@ export default function PantryImageReviewScreen() {
                 keyboardShouldPersistTaps="handled"
             >
                 {imageUri ? (
-                    <Image
-                        source={{ uri: imageUri }}
+                    <CachedImage
+                        uri={imageUri}
                         className="w-full h-40 rounded-xl mb-3 bg-surface"
-                        resizeMode="cover"
+                        style={{ width: '100%', height: 160, borderRadius: 12 }}
+                        contentFit="cover"
                     />
                 ) : null}
 
@@ -146,7 +147,7 @@ export default function PantryImageReviewScreen() {
                                     placeholder={t('pantryVision.category')}
                                     className="flex-1 text-sm text-muted mr-2"
                                 />
-                                <TouchableOpacity
+                                <TouchableOpacity hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                                     onPress={() => removeRow(row.key)}
                                     accessibilityLabel={t('common.delete')}
                                 >

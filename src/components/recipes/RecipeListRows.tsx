@@ -45,7 +45,7 @@ function FolderRowComponent({
         </View>
         <View className="flex-row items-center">
           <Text className="text-muted text-sm mr-2">{recipeCount} recipes</Text>
-          <TouchableOpacity
+          <TouchableOpacity hitSlop={{ top: 6, bottom: 6, left: 0, right: 0 }}
             onPress={() => onToggleActions(showActions ? null : folder.id)}
             className="p-1"
           >
@@ -109,13 +109,13 @@ function RecipeRowComponent({ recipe, onOpen, onEdit, onDelete }: RecipeRowProps
           </Text>
         </View>
         <View className="flex-row">
-          <TouchableOpacity
+          <TouchableOpacity hitSlop={{ top: 6, bottom: 6, left: 0, right: 0 }}
             onPress={() => onEdit(recipe)}
             className="p-2"
           >
             <EditIcon size={18} color={colors.herb} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => onDelete(recipe.id)} className="p-2">
+          <TouchableOpacity hitSlop={{ top: 6, bottom: 6, left: 0, right: 0 }} onPress={() => onDelete(recipe.id)} className="p-2">
             <TrashIcon size={18} color={colors.danger} />
           </TouchableOpacity>
         </View>
