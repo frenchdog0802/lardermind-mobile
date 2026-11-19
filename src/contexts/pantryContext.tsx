@@ -43,6 +43,7 @@ import {
     applyItemRemove,
     applyMarkAllChecked,
     enqueueMarkAllUpdates,
+    type ShoppingListMutationV1,
 } from '../services/shoppingListOffline';
 import {
     enrichPantryNames,
@@ -255,6 +256,20 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
     const [shoppingList, setShoppingList] = useState<ShoppingListItem[]>([]);
     const [shoppingListSyncStatus, setShoppingListSyncStatus] =
         useState<ShoppingListSyncStatus>(DEFAULT_SYNC_STATUS);
+    // Always-current copy of the shopping list. Updated synchronously by every writer so
+    // optimistic updates can be computed without waiting for AsyncStorage round-trips.
+    const shoppingListRef = useRef<ShoppingListItem[]>([]);
+    const pendingShoppingWritesRef = useRef(0);
+    const applyShoppingList = useCallback(
+        (value: ShoppingListItem[] | ((prev: ShoppingListItem[]) => ShoppingListItem[])) => {
+            const next = asList<ShoppingListItem>(
+                typeof value === 'function' ? value(shoppingListRef.current) : value,
+            );
+            shoppingListRef.current = next;
+            setShoppingList(next);
+        },
+        [],
+    );
     const [recipes, setRecipes] = useState<Recipe[]>([]);
     const [userSettings, setUserSettings] = useState<UserSettings>(DEFAULT_USER_SETTINGS);
 
@@ -271,7 +286,7 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         setRecipes([]);
         setPantryItems([]);
-        setShoppingList([]);
+        applyShoppingList([]);
         setIngredients([]);
         setMealPlan([]);
         setFolders(DEFAULT_FOLDERS);
@@ -300,7 +315,7 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
         if (!userId) return;
         updateSyncStatus({ isSyncing: true });
         const result = await flushShoppingListQueue(userId, {
-            onItems: (items) => setShoppingList(Array.isArray(items) ? items : []),
+            onItems: (items) => applyShoppingList(Array.isArray(items) ? items : []),
         });
         updateSyncStatus({
             isSyncing: false,
@@ -309,7 +324,7 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
             ...(result.ok && result.remaining === 0 ? { lastSyncedAt: Date.now() } : {}),
         });
         if (result.items) {
-            setShoppingList(Array.isArray(result.items) ? result.items : []);
+            applyShoppingList(Array.isArray(result.items) ? result.items : []);
         }
     }, [userId, updateSyncStatus]);
 
@@ -357,14 +372,14 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
         let cancelled = false;
         (async () => {
             if (!userId) {
-                setShoppingList([]);
+                applyShoppingList([]);
                 setShoppingListSyncStatus(DEFAULT_SYNC_STATUS);
                 return;
             }
             const cached = await loadSnapshot(userId);
             const queue = await loadQueue(userId);
             if (cancelled) return;
-            setShoppingList(asList(cached));
+            applyShoppingList(asList(cached));
             updateSyncStatus({ pendingCount: queue.length });
         })();
         return () => {
@@ -624,7 +639,7 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
                 setIngredients(next);
                 // Backfill blank Nest list names once the catalog is available.
                 setPantryItems((prev) => enrichPantryNames(asList(prev), next));
-                setShoppingList((prev) => enrichShoppingNames(asList(prev), next));
+                applyShoppingList((prev) => enrichShoppingNames(asList(prev), next));
             } else if (response.success) {
                 setIngredients([]);
             }
@@ -651,8 +666,12 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
             return shoppingList;
         }
 
-        const cached = await loadSnapshot(userId);
-        setShoppingList(asList(cached));
+        // While local writes are still persisting, the in-memory list is newer than disk.
+        const cached =
+            pendingShoppingWritesRef.current > 0
+                ? shoppingListRef.current
+                : await loadSnapshot(userId);
+        applyShoppingList(asList(cached));
 
         const online = await getIsOnline();
         updateSyncStatus({ isOnline: online });
@@ -669,7 +688,7 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
                 const serverItems = parseShoppingListItems(response.data);
                 const merged = mergeNames(cached, serverItems);
                 const enriched = enrichShoppingNames(merged, ingredientsRef.current);
-                setShoppingList(asList(enriched));
+                applyShoppingList(asList(enriched));
                 await saveSnapshot(userId, enriched);
                 setResourceError('shopping', false);
                 const queue = await loadQueue(userId);
@@ -684,7 +703,7 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
                 return enriched;
             }
             if (response.success) {
-                setShoppingList([]);
+                applyShoppingList([]);
                 await saveSnapshot(userId, []);
                 return [];
             }
@@ -699,31 +718,50 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
         }
     }, [userId, shoppingList, updateSyncStatus, runFlush, setResourceLoading, setResourceError]);
 
-    const updateShoppingListItem = useCallback(async (item: ShoppingListItem): Promise<ApiResponse<ShoppingListItem>> => {
-        return shoppingWriteRef.current(async () => {
-            const current = userId ? await loadSnapshot(userId) : (Array.isArray(shoppingList) ? shoppingList : []);
-            const next = applyItemUpdate(asList(current), item);
-            setShoppingList(asList(next));
-            if (userId) {
-                await saveSnapshot(userId, next);
-                const queue = enqueueUpdate(await loadQueue(userId), item.id, {
-                    name: item.name,
-                    quantity: item.quantity,
-                    unit: item.unit,
-                    checked: item.checked,
+    /**
+     * Persist a local shopping-list write (snapshot + queue). State has ALREADY been updated
+     * optimistically by the caller. Writes stay strictly serial so queue ordering is preserved;
+     * the snapshot is only written by the last pending job (it always reflects the latest list).
+     */
+    const persistShoppingWrite = useCallback(
+        (mutate: (queue: ShoppingListMutationV1[]) => ShoppingListMutationV1[]): Promise<void> => {
+            const uid = userId;
+            pendingShoppingWritesRef.current += 1;
+            return shoppingWriteRef
+                .current(async () => {
+                    pendingShoppingWritesRef.current -= 1;
+                    if (!uid) return;
+                    if (pendingShoppingWritesRef.current === 0 && uid === userIdRef.current) {
+                        await saveSnapshot(uid, shoppingListRef.current);
+                    }
+                    const queue = mutate(await loadQueue(uid));
+                    await saveQueue(uid, queue);
+                    updateSyncStatus({ pendingCount: queue.length, lastSyncError: null });
+                    if (isOnlineRef.current) {
+                        scheduleFlush();
+                    }
+                })
+                .catch((error) => {
+                    console.error('Failed to persist shopping list change:', error);
                 });
-                await saveQueue(userId, queue);
-                updateSyncStatus({ pendingCount: queue.length, lastSyncError: null });
-                if (isOnlineRef.current) {
-                    scheduleFlush();
-                }
-            }
-            return { success: true, data: item };
-        });
-    }, [userId, shoppingList, updateSyncStatus, scheduleFlush]);
+        },
+        [userId, updateSyncStatus, scheduleFlush],
+    );
+
+    const updateShoppingListItem = useCallback(async (item: ShoppingListItem): Promise<ApiResponse<ShoppingListItem>> => {
+        applyShoppingList(applyItemUpdate(shoppingListRef.current, item));
+        await persistShoppingWrite((queue) =>
+            enqueueUpdate(queue, item.id, {
+                name: item.name,
+                quantity: item.quantity,
+                unit: item.unit,
+                checked: item.checked,
+            }),
+        );
+        return { success: true, data: item };
+    }, [applyShoppingList, persistShoppingWrite]);
 
     const addShoppingListItem = useCallback(async (item: Partial<ShoppingListItem>): Promise<ApiResponse<ShoppingListItem>> => {
-        return shoppingWriteRef.current(async () => {
             const localItem: ShoppingListItem = {
                 id: createLocalItemId(),
                 name: String(item.name ?? '').trim(),
@@ -739,62 +777,30 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
                 return { success: false, message: 'Item name is required' };
             }
 
-            const current = userId ? await loadSnapshot(userId) : [];
-            const next = [localItem, ...current];
-            setShoppingList(asList(next));
-            if (userId) {
-                await saveSnapshot(userId, next);
-                const queue = enqueueCreate(await loadQueue(userId), localItem.id, {
+            applyShoppingList([localItem, ...shoppingListRef.current]);
+            await persistShoppingWrite((queue) =>
+                enqueueCreate(queue, localItem.id, {
                     name: localItem.name,
                     quantity: localItem.quantity,
                     unit: localItem.unit,
                     checked: false,
-                });
-                await saveQueue(userId, queue);
-                updateSyncStatus({ pendingCount: queue.length, lastSyncError: null });
-                if (isOnlineRef.current) {
-                    scheduleFlush();
-                }
-            }
+                }),
+            );
             return { success: true, data: localItem };
-        });
-    }, [userId, updateSyncStatus, scheduleFlush]);
+    }, [applyShoppingList, persistShoppingWrite]);
 
     const removeShoppingListItem = useCallback(async (id: string) => {
-        await shoppingWriteRef.current(async () => {
-            const current = userId ? await loadSnapshot(userId) : (Array.isArray(shoppingList) ? shoppingList : []);
-            const next = applyItemRemove(asList(current), id);
-            setShoppingList(asList(next));
-            if (userId) {
-                await saveSnapshot(userId, next);
-                const queue = enqueueDelete(await loadQueue(userId), id);
-                await saveQueue(userId, queue);
-                updateSyncStatus({ pendingCount: queue.length, lastSyncError: null });
-                if (isOnlineRef.current) {
-                    scheduleFlush();
-                }
-            }
-        });
-    }, [userId, shoppingList, updateSyncStatus, scheduleFlush]);
+        applyShoppingList(applyItemRemove(shoppingListRef.current, id));
+        await persistShoppingWrite((queue) => enqueueDelete(queue, id));
+    }, [applyShoppingList, persistShoppingWrite]);
 
     const markAllShoppingListChecked = useCallback(async (): Promise<number> => {
-        return shoppingWriteRef.current(async () => {
-            const current = userId ? await loadSnapshot(userId) : (Array.isArray(shoppingList) ? shoppingList : []);
-            const { next, changed } = applyMarkAllChecked(asList(current));
-            if (changed.length === 0) return 0;
-            setShoppingList(asList(next));
-            if (userId) {
-                await saveSnapshot(userId, next);
-                const queue = enqueueMarkAllUpdates(await loadQueue(userId), changed);
-                await saveQueue(userId, queue);
-                updateSyncStatus({ pendingCount: queue.length, lastSyncError: null });
-                if (isOnlineRef.current) {
-                    scheduleFlush();
-                }
-            }
-            return changed.length;
-        });
-    }, [userId, shoppingList, updateSyncStatus, scheduleFlush]);
+        const { next, changed } = applyMarkAllChecked(shoppingListRef.current);
+        if (changed.length === 0) return 0;
+        applyShoppingList(next);
+        await persistShoppingWrite((queue) => enqueueMarkAllUpdates(queue, changed));
+        return changed.length;
+    }, [applyShoppingList, persistShoppingWrite]);
 
     const retryShoppingListSync = useCallback(async () => {
         await runFlush();
@@ -806,8 +812,8 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
             if (response.success && response.data) {
                 const result = parseSyncResult(response.data);
                 const byId = new Map(result.synced.map((i) => [i.id, i]));
-                setShoppingList((prev) => {
-                    const next = asList(prev).map((item) => {
+                applyShoppingList((prev) => {
+                    const next = asList<ShoppingListItem>(prev).map((item) => {
                         const synced = byId.get(item.id);
                         return synced
                             ? { ...item, ...synced, synced_to_pantry: true }
@@ -835,8 +841,8 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
             if (response.success && response.data) {
                 const result = parseUnsyncResult(response.data);
                 const byId = new Map(result.unsynced.map((i) => [i.id, i]));
-                setShoppingList((prev) => {
-                    const next = asList(prev).map((item) => {
+                applyShoppingList((prev) => {
+                    const next = asList<ShoppingListItem>(prev).map((item) => {
                         const unsynced = byId.get(item.id);
                         return unsynced
                             ? { ...item, ...unsynced, synced_to_pantry: false }
