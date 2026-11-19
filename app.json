@@ -2,7 +2,7 @@
   "expo": {
     "scheme": "lardermind",
     "name": "LarderMind",
-    "slug": "lardermind",
+    "slug": "PantryApp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -16,6 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.lardermind.app",
+      "appleTeamId": "535UF7UZS4",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "LarderMind uses the camera to photograph groceries for your pantry.",

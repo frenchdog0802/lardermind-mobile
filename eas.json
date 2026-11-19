@@ -8,7 +8,8 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://cookcopilot-backend.onrender.com/api/"
+        "EXPO_PUBLIC_API_BASE_URL": "https://lardermind-api-staging.lardermind.workers.dev/api/",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "603047692060-llk1cjf1b0f5bpdb9it5cvogk2b8haio.apps.googleusercontent.com"
       }
     },
     "preview": {
@@ -17,17 +18,24 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://cookcopilot-backend.onrender.com/api/"
+        "EXPO_PUBLIC_API_BASE_URL": "https://lardermind-api-staging.lardermind.workers.dev/api/",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "603047692060-llk1cjf1b0f5bpdb9it5cvogk2b8haio.apps.googleusercontent.com"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://cookcopilot-backend.onrender.com/api/"
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.lardermind.com/api/",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "603047692060-llk1cjf1b0f5bpdb9it5cvogk2b8haio.apps.googleusercontent.com"
       }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "appleTeamId": "535UF7UZS4",
+        "ascAppId": "6823048274"
+      }
+    }
   }
 }
