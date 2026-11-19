@@ -663,7 +663,7 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
     // === SHOPPING LIST FUNCTIONS ===
     const fetchAllShoppingListItems = useCallback(async (): Promise<ShoppingListItem[]> => {
         if (!userId) {
-            return shoppingList;
+            return shoppingListRef.current;
         }
 
         // While local writes are still persisting, the in-memory list is newer than disk.
@@ -716,7 +716,7 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
         } finally {
             setResourceLoading('shopping', false);
         }
-    }, [userId, shoppingList, updateSyncStatus, runFlush, setResourceLoading, setResourceError]);
+    }, [userId, updateSyncStatus, runFlush, setResourceLoading, setResourceError]);
 
     /**
      * Persist a local shopping-list write (snapshot + queue). State has ALREADY been updated

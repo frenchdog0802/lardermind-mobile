@@ -214,6 +214,7 @@ function ChatMessageRowComponent({
   onDefineUnit,
   defineUnitBusy = false,
 }: ChatMessageRowProps) {
+  const { t } = useTranslation();
   const isUser = item.role === 'user';
   const showStreamingPlaceholder = Boolean(item.streaming && !item.content);
   const recipeCard =
@@ -236,18 +237,32 @@ function ChatMessageRowComponent({
           <View className="gap-2">
             <View className="flex-row items-center gap-2 py-1">
               <ActivityIndicator size="small" color={colors.herb} />
-              <Text className="text-muted text-sm">{item.statusText || 'Thinking…'}</Text>
+              <Text className="text-muted text-sm">{item.statusText || t('ai.thinking')}</Text>
             </View>
           </View>
         ) : (
           <View>
             <View className="flex-row flex-wrap items-end">
               <View className="flex-shrink">
-                <ChatMessageContent
-                  content={item.content}
-                  isUser={isUser}
-                  style={item.type === 'error' && !isUser ? { color: colors.danger } : undefined}
-                />
+                {item.streaming ? (
+                  // Plain text while tokens are arriving: re-parsing markdown on every flush is
+                  // expensive. The finished message is rendered as markdown.
+                  <Text
+                    style={{
+                      color: isUser ? colors.onHerb : colors.ink,
+                      fontSize: 15,
+                      lineHeight: 22,
+                    }}
+                  >
+                    {item.content}
+                  </Text>
+                ) : (
+                  <ChatMessageContent
+                    content={item.content}
+                    isUser={isUser}
+                    style={item.type === 'error' && !isUser ? { color: colors.danger } : undefined}
+                  />
+                )}
               </View>
               {item.streaming ? <StreamingCaret /> : null}
             </View>
@@ -259,7 +274,7 @@ function ChatMessageRowComponent({
 
         {item.type === 'interrupt' && pendingApproval ? (
           <View className="mt-3 pt-3 border-t border-line">
-            <Text className="text-ink text-sm font-medium mb-2">Approve these changes?</Text>
+            <Text className="text-ink text-sm font-medium mb-2">{t('ai.approveTitle')}</Text>
             {pendingApproval.pendingTools.map((tool, index) => (
               <Text key={`${tool.name}-${index}`} className="text-xs text-muted mb-1">
                 <Text className="font-medium text-ink">{tool.name}</Text>
@@ -272,14 +287,14 @@ function ChatMessageRowComponent({
                 onPress={onApprove}
                 disabled={approvalBusy}
               >
-                <Text className="text-white text-sm">Approve</Text>
+                <Text className="text-white text-sm">{t('ai.approve')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 className="flex-1 bg-sage py-2 rounded-lg items-center"
                 onPress={onReject}
                 disabled={approvalBusy}
               >
-                <Text className="text-ink text-sm">Reject</Text>
+                <Text className="text-ink text-sm">{t('ai.reject')}</Text>
               </TouchableOpacity>
             </View>
           </View>

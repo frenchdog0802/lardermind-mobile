@@ -9,6 +9,8 @@ import {
     Alert,
     DeviceEventEmitter,
     NativeSyntheticEvent,
+    NativeScrollEvent,
+    Keyboard,
     TextInputContentSizeChangeEventData,
     ActivityIndicator,
 } from 'react-native';
@@ -40,6 +42,8 @@ import { pantryVisionApi } from '../api/pantryVision';
 const INPUT_LINE_HEIGHT = 22;
 const INPUT_MIN_HEIGHT = 22;
 const INPUT_MAX_HEIGHT = 100;
+/** Streamed tokens are flushed to state at most this often. */
+const TOKEN_FLUSH_MS = 50;
 
 type ChatScreenParams = {
   Chat?: {
@@ -96,6 +100,15 @@ export default function AICookingAssistantScreen() {
     const flatListRef = useRef<FlashListRef<Message>>(null);
     const nearBottomRef = useRef(true);
     const [historyReady, setHistoryReady] = useState(false);
+    const [loadError, setLoadError] = useState(false);
+    const loadSeqRef = useRef(0);
+    const loadTargetRef = useRef<string | undefined>(undefined);
+    const loadErrorRef = useRef(false);
+    const mountedRef = useRef(true);
+    const abortRef = useRef<AbortController | null>(null);
+    const tokenBufferRef = useRef('');
+    const tokenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [keyboardVisible, setKeyboardVisible] = useState(false);
 
     const [input, setInput] = useState('');
     const [inputHeight, setInputHeight] = useState(INPUT_MIN_HEIGHT);
@@ -111,7 +124,32 @@ export default function AICookingAssistantScreen() {
     const [recognizing, setRecognizing] = useState(false);
     const [composerFocused, setComposerFocused] = useState(false);
 
-    const canSend = input.trim().length > 0 && !isTyping && !pendingApproval;
+    const isTypingRef = useRef(false);
+    const pendingApprovalRef = useRef(pendingApproval);
+    pendingApprovalRef.current = pendingApproval;
+
+    const canSend = input.trim().length > 0 && !isTyping && !pendingApproval && !loadError;
+
+    // Cancel the in-flight stream and timers when the screen unmounts.
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => {
+            mountedRef.current = false;
+            abortRef.current?.abort();
+            if (tokenTimerRef.current) clearTimeout(tokenTimerRef.current);
+        };
+    }, []);
+
+    useEffect(() => {
+        const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+        const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+        const show = Keyboard.addListener(showEvt, () => setKeyboardVisible(true));
+        const hide = Keyboard.addListener(hideEvt, () => setKeyboardVisible(false));
+        return () => {
+            show.remove();
+            hide.remove();
+        };
+    }, []);
     const isEmptyChat = messages.length === 0;
 
     const suggestedPrompts = useMemo(() => {
@@ -171,66 +209,111 @@ export default function AICookingAssistantScreen() {
         }
     }, [recognizing, isTyping, t, navigation]);
 
-    useEffect(() => {
-        const bootstrap = async () => {
+    const applyHistory = useCallback(
+        (data: NonNullable<Awaited<ReturnType<typeof chatApi.getHistory>>['data']>, sid: string | null) => {
+            const mapped: Message[] = data.messages?.length
+                ? data.messages.map((entry: HistoryMessage) => ({
+                      id: entry.id,
+                      role: entry.role,
+                      content: entry.content,
+                      type: entry.responseType as ChatResponseType | undefined,
+                      cardData: entry.cardData as ResponseCardData | undefined,
+                      timestamp: entry.createdAt * 1000,
+                  }))
+                : [];
+            const pending = data.pendingInterrupt;
+            const hasPending = Boolean(sid && pending?.pendingTools?.length);
+            setMessages(
+                hasPending && !mapped.some((m) => m.type === 'interrupt')
+                    ? [
+                          ...mapped,
+                          {
+                              id: `interrupt-restored-${Date.now()}`,
+                              role: 'assistant',
+                              content: t('ai.approvalRestored'),
+                              timestamp: Date.now(),
+                              type: 'interrupt' as ChatResponseType,
+                          },
+                      ]
+                    : mapped,
+            );
+            if (hasPending && sid && pending) {
+                setPendingApproval({ sessionId: sid, pendingTools: pending.pendingTools });
+            } else {
+                setPendingApproval(null);
+            }
+        },
+        [t],
+    );
+
+    /**
+     * Load a conversation. With no target: bootstrap (sessions list + default history in
+     * parallel). Failures show an error state with Retry instead of an empty chat.
+     */
+    const loadConversation = useCallback(
+        async (target?: string) => {
+            const seq = ++loadSeqRef.current;
+            loadTargetRef.current = target;
+            loadErrorRef.current = false;
+            setLoadError(false);
+            setHistoryReady(false);
             try {
-                const sessionsRes = await chatApi.listSessions();
-                const list = sessionsRes.data?.sessions ?? [];
-                const initialId =
-                    list.find((s) => s.isDefault)?.id ?? list[0]?.id ?? null;
-                setActiveSessionId(initialId);
-                const response = await chatApi.getHistory(initialId ?? undefined);
-                if (response.success && response.data) {
-                    const sid = response.data.sessionId ?? initialId;
-                    setActiveSessionId(sid);
-                    const mapped: Message[] = response.data.messages?.length
-                        ? response.data.messages.map((entry: HistoryMessage) => ({
-                              id: entry.id,
-                              role: entry.role,
-                              content: entry.content,
-                              type: entry.responseType as ChatResponseType | undefined,
-                              cardData: entry.cardData as ResponseCardData | undefined,
-                              timestamp: entry.createdAt * 1000,
-                          }))
-                        : [];
-                    const pending = response.data.pendingInterrupt;
-                    const hasPending = Boolean(sid && pending?.pendingTools?.length);
-                    setMessages(
-                        hasPending && !mapped.some((m) => m.type === 'interrupt')
-                            ? [
-                                  ...mapped,
-                                  {
-                                      id: `interrupt-restored-${Date.now()}`,
-                                      role: 'assistant',
-                                      content:
-                                          'I need your approval before making these changes.',
-                                      timestamp: Date.now(),
-                                      type: 'interrupt' as ChatResponseType,
-                                  },
-                              ]
-                            : mapped,
-                    );
-                    if (hasPending && sid && pending) {
-                        setPendingApproval({
-                            sessionId: sid,
-                            pendingTools: pending.pendingTools,
-                        });
-                    } else {
-                        setPendingApproval(null);
-                    }
+                let sid: string | null = target ?? null;
+                let response: Awaited<ReturnType<typeof chatApi.getHistory>>;
+                if (target) {
+                    response = await chatApi.getHistory(target);
                 } else {
+                    const [sessionsRes, defaultHistory] = await Promise.all([
+                        chatApi.listSessions(),
+                        chatApi.getHistory(),
+                    ]);
+                    const list = sessionsRes.data?.sessions ?? [];
+                    const initialId = list.find((s) => s.isDefault)?.id ?? list[0]?.id ?? null;
+                    sid = initialId;
+                    response = defaultHistory;
+                    // Only re-fetch when the server's implicit default differs from the chosen session.
+                    if (
+                        seq === loadSeqRef.current &&
+                        initialId &&
+                        defaultHistory.success &&
+                        defaultHistory.data?.sessionId &&
+                        defaultHistory.data.sessionId !== initialId
+                    ) {
+                        response = await chatApi.getHistory(initialId);
+                    }
+                }
+                if (seq !== loadSeqRef.current) return;
+                if (!response.success || !response.data) {
+                    loadErrorRef.current = true;
+                    setLoadError(true);
+                    setMessages([]);
+                    setPendingApproval(null);
+                    return;
+                }
+                sid = response.data.sessionId ?? sid;
+                setActiveSessionId(sid);
+                applyHistory(response.data, sid);
+            } catch (error) {
+                console.error('Failed to load chat history', error);
+                if (seq === loadSeqRef.current) {
+                    loadErrorRef.current = true;
+                    setLoadError(true);
                     setMessages([]);
                     setPendingApproval(null);
                 }
-            } catch (error) {
-                console.error('Failed to load chat history', error);
-                setMessages([]);
             } finally {
-                setHistoryReady(true);
+                if (seq === loadSeqRef.current) setHistoryReady(true);
             }
-        };
+        },
+        [applyHistory],
+    );
 
-        void bootstrap();
+    const handleRetryLoad = useCallback(() => {
+        void loadConversation(loadTargetRef.current);
+    }, [loadConversation]);
+
+    useEffect(() => {
+        void loadConversation();
         // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only bootstrap
     }, []);
 
@@ -238,66 +321,28 @@ export default function AICookingAssistantScreen() {
         try {
             const created = await chatApi.createSession();
             if (created.success && created.data) {
+                // A new chat supersedes any in-flight/failed load.
+                loadSeqRef.current += 1;
+                loadErrorRef.current = false;
+                setLoadError(false);
+                setHistoryReady(true);
                 setActiveSessionId(created.data.id);
                 setPendingApproval(null);
                 setMessages([]);
+            } else {
+                Alert.alert(t('common.error'), created.message || t('ai.networkError'));
             }
         } catch (error) {
             console.error(error);
+            Alert.alert(t('common.error'), t('ai.networkError'));
         }
-    }, []);
+    }, [t]);
 
     const handleSwitchSession = useCallback(async (sessionId: string) => {
-        if (sessionId === activeSessionId || isTyping) return;
+        if (sessionId === activeSessionId || isTypingRef.current) return;
         setActiveSessionId(sessionId);
-        try {
-            const response = await chatApi.getHistory(sessionId);
-            if (response.success && response.data) {
-                const mapped: Message[] = response.data.messages?.length
-                    ? response.data.messages.map((entry: HistoryMessage) => ({
-                          id: entry.id,
-                          role: entry.role,
-                          content: entry.content,
-                          type: entry.responseType as ChatResponseType | undefined,
-                          cardData: entry.cardData as ResponseCardData | undefined,
-                          timestamp: entry.createdAt * 1000,
-                      }))
-                    : [];
-                const pending = response.data.pendingInterrupt;
-                const hasPending = Boolean(pending?.pendingTools?.length);
-                setMessages(
-                    hasPending && !mapped.some((m) => m.type === 'interrupt')
-                        ? [
-                              ...mapped,
-                              {
-                                  id: `interrupt-restored-${Date.now()}`,
-                                  role: 'assistant',
-                                  content:
-                                      'I need your approval before making these changes.',
-                                  timestamp: Date.now(),
-                                  type: 'interrupt' as ChatResponseType,
-                              },
-                          ]
-                        : mapped,
-                );
-                if (hasPending && pending) {
-                    setPendingApproval({
-                        sessionId,
-                        pendingTools: pending.pendingTools,
-                    });
-                } else {
-                    setPendingApproval(null);
-                }
-            } else {
-                setMessages([]);
-                setPendingApproval(null);
-            }
-        } catch (error) {
-            console.error(error);
-            setMessages([]);
-            setPendingApproval(null);
-        }
-    }, [activeSessionId, isTyping]);
+        await loadConversation(sessionId);
+    }, [activeSessionId, loadConversation]);
 
     useEffect(() => {
         const { sessionId, newChat } = route.params ?? {};
@@ -350,7 +395,14 @@ export default function AICookingAssistantScreen() {
         userMessageContent: string,
         opts?: { hidden?: boolean },
     ) => {
-        if (!userMessageContent.trim() || isTyping || pendingApproval) return;
+        if (
+            !userMessageContent.trim() ||
+            isTypingRef.current ||
+            pendingApprovalRef.current ||
+            loadErrorRef.current
+        ) {
+            return;
+        }
 
         const hidden = Boolean(opts?.hidden);
         const userMessage: Message = {
@@ -366,7 +418,7 @@ export default function AICookingAssistantScreen() {
             content: '',
             timestamp: Date.now(),
             streaming: true,
-            statusText: 'Thinking…',
+            statusText: t('ai.thinking'),
         };
 
         setMessages((prev) =>
@@ -376,15 +428,57 @@ export default function AICookingAssistantScreen() {
             setInput('');
             setInputHeight(INPUT_MIN_HEIGHT);
         }
+        isTypingRef.current = true;
         setIsTyping(true);
         nearBottomRef.current = true;
         requestAnimationFrame(() => {
             flatListRef.current?.scrollToEnd({ animated: true });
         });
 
+        // Cancel any previous stream; the new one owns the abort controller until it ends.
+        abortRef.current?.abort();
+        const controller = new AbortController();
+        abortRef.current = controller;
+
+        // Tokens arrive far faster than we want to re-render: buffer and flush on a timer.
+        tokenBufferRef.current = '';
+        const discardTokens = () => {
+            if (tokenTimerRef.current) {
+                clearTimeout(tokenTimerRef.current);
+                tokenTimerRef.current = null;
+            }
+            tokenBufferRef.current = '';
+        };
+        const flushTokens = () => {
+            if (tokenTimerRef.current) {
+                clearTimeout(tokenTimerRef.current);
+                tokenTimerRef.current = null;
+            }
+            const chunk = tokenBufferRef.current;
+            if (!chunk || !mountedRef.current) return;
+            tokenBufferRef.current = '';
+            setMessages((prev) => {
+                let idx = prev.length - 1;
+                if (idx < 0 || prev[idx].id !== assistantId) {
+                    idx = prev.findIndex((message) => message.id === assistantId);
+                }
+                if (idx < 0) return prev;
+                const next = prev.slice();
+                next[idx] = {
+                    ...prev[idx],
+                    content: prev[idx].content + chunk,
+                    statusText: undefined,
+                };
+                return next;
+            });
+        };
+
         let settled = false;
         const settleStreaming = (updater: (message: Message) => Message) => {
             settled = true;
+            // Final content replaces whatever was streamed; drop any unflushed tokens.
+            discardTokens();
+            if (!mountedRef.current) return;
             setMessages((prev) =>
                 prev.map((message) => (message.id === assistantId ? updater(message) : message)),
             );
@@ -398,17 +492,10 @@ export default function AICookingAssistantScreen() {
                 },
                 {
                     onToken: (token) => {
-                        setMessages((prev) =>
-                            prev.map((message) =>
-                                message.id === assistantId
-                                    ? {
-                                          ...message,
-                                          content: message.content + token,
-                                          statusText: undefined,
-                                      }
-                                    : message,
-                            ),
-                        );
+                        tokenBufferRef.current += token;
+                        if (!tokenTimerRef.current) {
+                            tokenTimerRef.current = setTimeout(flushTokens, TOKEN_FLUSH_MS);
+                        }
                     },
                     onStatus: (status) => {
                         setMessages((prev) =>
@@ -430,8 +517,7 @@ export default function AICookingAssistantScreen() {
                         settleStreaming((message) => ({
                             ...message,
                             type: 'interrupt',
-                            content:
-                                response.message || 'Approval required before applying changes.',
+                            content: response.message || t('ai.approvalRequired'),
                             streaming: false,
                             statusText: undefined,
                         }));
@@ -450,9 +536,7 @@ export default function AICookingAssistantScreen() {
                             settleStreaming((message) => ({
                                 ...message,
                                 type: 'interrupt',
-                                content:
-                                    response.message ||
-                                    'Approval required before applying changes.',
+                                content: response.message || t('ai.approvalRequired'),
                                 streaming: false,
                                 statusText: undefined,
                             }));
@@ -475,9 +559,7 @@ export default function AICookingAssistantScreen() {
                         }
                     },
                     onError: (message) => {
-                        const text =
-                            message ||
-                            "Sorry, I couldn't get a response. Please try again.";
+                        const text = message || t('ai.noResponse');
                         if (
                             isGuest &&
                             /signup_required|sign up to save/i.test(text)
@@ -506,70 +588,95 @@ export default function AICookingAssistantScreen() {
                         });
                     },
                 },
+                controller.signal,
             );
         } catch (error) {
-            console.error(error);
-            if (!settled) {
-                settleStreaming((message) => ({
-                    ...message,
-                    type: 'error',
-                    content: 'Network error. Please check your connection.',
-                    streaming: false,
-                    statusText: undefined,
-                }));
+            // Aborted (screen unmounted or superseded by a new send): nothing to show.
+            if (!controller.signal.aborted) {
+                console.error(error);
+                if (!settled) {
+                    settleStreaming((message) => ({
+                        ...message,
+                        type: 'error',
+                        content: t('ai.networkError'),
+                        streaming: false,
+                        statusText: undefined,
+                    }));
+                }
             }
         } finally {
-            setIsTyping(false);
+            if (abortRef.current === controller) {
+                abortRef.current = null;
+            }
             if (!settled) {
-                setMessages((prev) =>
-                    prev.map((message) =>
-                        message.id === assistantId
-                            ? { ...message, streaming: false }
-                            : message,
-                    ),
-                );
+                // Keep whatever text already streamed, then stop the caret.
+                flushTokens();
+                discardTokens();
+            }
+            if (mountedRef.current && abortRef.current === null) {
+                isTypingRef.current = false;
+                setIsTyping(false);
+                if (!settled) {
+                    setMessages((prev) =>
+                        prev.map((message) =>
+                            message.id === assistantId
+                                ? { ...message, streaming: false }
+                                : message,
+                        ),
+                    );
+                }
             }
         }
     };
 
     const handleSend = async () => {
-        if (!input.trim() || isTyping || pendingApproval) return;
+        if (!canSend) return;
         await sendChatMessage(input.trim());
     };
 
-    const handleDefineUnit = async (action: DefineUnitAction, ratio: number) => {
-        if (!(ratio > 0) || isTyping || pendingApproval) return;
-        const saved = await unitConversionsApi.upsert({
-            itemName: action.item,
-            baseUnit: action.from_unit,
-            targetUnit: action.to_unit,
-            ratio,
-        });
-        if (!saved) {
-            Alert.alert(t('settings.savePrefsError'));
-            return;
-        }
-        const context = `[context] User defined unit conversion: 1 ${action.from_unit} ${action.item} = ${ratio} ${action.to_unit}. Re-run suggestMealsFromPantry and update cookability.`;
-        await sendChatMessage(context, { hidden: true });
-    };
+    // Stable identity (refs for volatile state) so memoized message rows are not re-rendered.
+    const latestRef = useRef({ sendChatMessage, refreshAfterAgentAction, mapResponseToMessage });
+    latestRef.current = { sendChatMessage, refreshAfterAgentAction, mapResponseToMessage };
 
-    const handleResume = async (
-        decision: 'approve' | 'reject',
-        sessionIdOverride?: string,
-    ) => {
-        const sessionId = sessionIdOverride ?? pendingApproval?.sessionId;
-        if (!sessionId) return;
-        setIsTyping(true);
-        try {
-            const response = await chatApi.resume({ sessionId, decision });
-            setPendingApproval(null);
-            if (response.success && response.data) {
+    const handleDefineUnit = useCallback(
+        async (action: DefineUnitAction, ratio: number) => {
+            if (!(ratio > 0) || isTypingRef.current || pendingApprovalRef.current) return;
+            const saved = await unitConversionsApi.upsert({
+                itemName: action.item,
+                baseUnit: action.from_unit,
+                targetUnit: action.to_unit,
+                ratio,
+            });
+            if (!saved) {
+                Alert.alert(t('settings.savePrefsError'));
+                return;
+            }
+            const context = `[context] User defined unit conversion: 1 ${action.from_unit} ${action.item} = ${ratio} ${action.to_unit}. Re-run suggestMealsFromPantry and update cookability.`;
+            await latestRef.current.sendChatMessage(context, { hidden: true });
+        },
+        [t],
+    );
+
+    const handleResume = useCallback(
+        async (decision: 'approve' | 'reject', sessionIdOverride?: string) => {
+            const sessionId = sessionIdOverride ?? pendingApprovalRef.current?.sessionId;
+            if (!sessionId) return;
+            isTypingRef.current = true;
+            setIsTyping(true);
+            try {
+                const response = await chatApi.resume({ sessionId, decision });
+                if (!response.success || !response.data) {
+                    // Keep the approval card so the user can retry.
+                    Alert.alert(t('common.error'), response.message || t('ai.resumeError'));
+                    return;
+                }
+                setPendingApproval(null);
                 if (response.data.type === 'interrupt') {
                     const tools =
                         (response.data.data?.pendingTools as PendingToolSummary[] | undefined) ?? [];
                     setPendingApproval({ sessionId, pendingTools: tools });
                 }
-                const assistantMessage = mapResponseToMessage(response.data);
+                const assistantMessage = latestRef.current.mapResponseToMessage(response.data);
                 setMessages((prev) => [...prev, assistantMessage]);
                 if (
                     assistantMessage.type &&
@@ -577,16 +684,18 @@ export default function AICookingAssistantScreen() {
                     assistantMessage.type !== 'error' &&
                     assistantMessage.type !== 'interrupt'
                 ) {
-                    await refreshAfterAgentAction(assistantMessage.type);
+                    await latestRef.current.refreshAfterAgentAction(assistantMessage.type);
                 }
+            } catch (error) {
+                console.error(error);
+                Alert.alert(t('common.error'), t('ai.resumeError'));
+            } finally {
+                isTypingRef.current = false;
+                if (mountedRef.current) setIsTyping(false);
             }
-        } catch (error) {
-            console.error(error);
-            Alert.alert('Error', 'Could not resume the chat action.');
-        } finally {
-            setIsTyping(false);
-        }
-    };
+        },
+        [t],
+    );
 
     const handleAddCreatedRecipeToMenu = useCallback(async (recipeId: string) => {
         setAddingToMenuRecipeId(recipeId);
@@ -645,6 +754,17 @@ export default function AICookingAssistantScreen() {
         setMessages([]);
     };
 
+    const approvalProp = useMemo(
+        () => (pendingApproval ? { pendingTools: pendingApproval.pendingTools } : null),
+        [pendingApproval],
+    );
+    const handleApprove = useCallback(() => {
+        void handleResume('approve');
+    }, [handleResume]);
+    const handleReject = useCallback(() => {
+        void handleResume('reject');
+    }, [handleResume]);
+
     const renderMessage = useCallback(({ item }: { item: Message }) => (
         <ChatMessageRow
             item={item}
@@ -654,16 +774,12 @@ export default function AICookingAssistantScreen() {
             onViewShoppingList={handleViewShoppingList}
             onViewCalendar={handleViewCalendar}
             onViewPantry={handleViewPantry}
-            pendingApproval={
-                item.type === 'interrupt' && pendingApproval
-                    ? { pendingTools: pendingApproval.pendingTools }
-                    : null
-            }
-            approvalBusy={isTyping}
-            onApprove={() => void handleResume('approve')}
-            onReject={() => void handleResume('reject')}
+            pendingApproval={item.type === 'interrupt' ? approvalProp : null}
+            approvalBusy={item.type === 'interrupt' && isTyping}
+            onApprove={handleApprove}
+            onReject={handleReject}
             onDefineUnit={handleDefineUnit}
-            defineUnitBusy={isTyping}
+            defineUnitBusy={item.type === 'meal_suggestions' && isTyping}
         />
     ), [
         addingToMenuRecipeId,
@@ -672,11 +788,34 @@ export default function AICookingAssistantScreen() {
         handleViewShoppingList,
         handleViewCalendar,
         handleViewPantry,
-        pendingApproval,
+        approvalProp,
         isTyping,
-        handleResume,
+        handleApprove,
+        handleReject,
         handleDefineUnit,
     ]);
+
+    const keyExtractor = useCallback((item: Message) => item.id, []);
+    const getItemType = useCallback(
+        (item: Message) =>
+            `${item.role}:${item.type ?? 'text'}:${item.streaming ? 'stream' : 'done'}`,
+        [],
+    );
+    const handleListScroll = useCallback(
+        (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+            const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+            const distanceFromBottom =
+                contentSize.height - layoutMeasurement.height - contentOffset.y;
+            nearBottomRef.current = distanceFromBottom < 140;
+        },
+        [],
+    );
+    const handleListContentSizeChange = useCallback(() => {
+        if (nearBottomRef.current) {
+            // Animated scrolling per streamed chunk fights itself; only animate when idle.
+            flatListRef.current?.scrollToEnd({ animated: !isTypingRef.current });
+        }
+    }, []);
 
     return (
         <View className="flex-1 bg-linen">
@@ -718,6 +857,20 @@ export default function AICookingAssistantScreen() {
                     <View className="flex-1 px-4 pt-4">
                         <SkeletonList count={4} />
                     </View>
+                ) : loadError ? (
+                    <View className="flex-1 items-center justify-center px-8" testID="chat-load-error">
+                        <Text className="text-ink text-base text-center mb-4">
+                            {t('ai.loadError')}
+                        </Text>
+                        <TouchableOpacity
+                            onPress={handleRetryLoad}
+                            accessibilityRole="button"
+                            className="bg-herb px-6 py-3 rounded-lg"
+                            testID="chat-load-retry"
+                        >
+                            <Text className="text-white font-medium">{t('common.retry')}</Text>
+                        </TouchableOpacity>
+                    </View>
                 ) : isEmptyChat ? (
                     <ChatEmptyState
                         suggestedPrompts={suggestedPrompts}
@@ -728,31 +881,24 @@ export default function AICookingAssistantScreen() {
                         ref={flatListRef}
                         data={messages}
                         renderItem={renderMessage}
-                        keyExtractor={(item) => item.id}
-                        getItemType={(item) =>
-                            `${item.role}:${item.type ?? 'text'}:${item.streaming ? 'stream' : 'done'}`
-                        }
+                        keyExtractor={keyExtractor}
+                        getItemType={getItemType}
                         drawDistance={DRAW_DISTANCE}
                         contentContainerStyle={{ padding: 16, paddingBottom: 8 }}
-                        onScroll={(e) => {
-                            const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
-                            const distanceFromBottom =
-                                contentSize.height - layoutMeasurement.height - contentOffset.y;
-                            nearBottomRef.current = distanceFromBottom < 140;
-                        }}
+                        onScroll={handleListScroll}
                         scrollEventThrottle={16}
-                        onContentSizeChange={() => {
-                            if (nearBottomRef.current) {
-                                flatListRef.current?.scrollToEnd({ animated: true });
-                            }
-                        }}
+                        onContentSizeChange={handleListContentSizeChange}
                         keyboardShouldPersistTaps="handled"
+                        keyboardDismissMode="interactive"
                     />
                 )}
 
                 <View
                     className="bg-linen px-3 pt-2"
-                    style={{ paddingBottom: Math.max(insets.bottom, 12) }}
+                    style={{
+                        // The keyboard already covers the home-indicator inset when it is open.
+                        paddingBottom: keyboardVisible ? 8 : Math.max(insets.bottom, 12),
+                    }}
                 >
                     {/* Elevated surface field on linen — clear figure-ground */}
                     <View
@@ -779,6 +925,7 @@ export default function AICookingAssistantScreen() {
                             accessibilityLabel={t('pantryVision.attach')}
                             activeOpacity={0.7}
                             className="h-10 w-10 rounded-full items-center justify-center"
+                            hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }}
                         >
                             {recognizing ? (
                                 <ActivityIndicator color={colors.herb} />
@@ -786,6 +933,7 @@ export default function AICookingAssistantScreen() {
                                 <PaperclipIcon size={20} color={colors.muted} />
                             )}
                         </TouchableOpacity>
+                        {/* Not locked with editable={!isTyping}: toggling editable dismisses the iOS keyboard. */}
                         <TextInput
                             className="flex-1 text-ink mx-1"
                             style={{
@@ -806,7 +954,6 @@ export default function AICookingAssistantScreen() {
                             multiline
                             scrollEnabled={inputHeight >= INPUT_MAX_HEIGHT}
                             blurOnSubmit={false}
-                            editable={!isTyping}
                             returnKeyType="default"
                             accessibilityLabel={t('ai.title')}
                         />
@@ -814,11 +961,12 @@ export default function AICookingAssistantScreen() {
                             onPress={handleSend}
                             disabled={!canSend}
                             accessibilityRole="button"
-                            accessibilityLabel="Send message"
+                            accessibilityLabel={t('ai.send')}
                             activeOpacity={0.7}
                             className={`h-10 w-10 rounded-full items-center justify-center ${
                                 canSend ? 'bg-herb' : 'bg-transparent'
                             }`}
+                            hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }}
                         >
                             <SendIcon
                                 size={18}

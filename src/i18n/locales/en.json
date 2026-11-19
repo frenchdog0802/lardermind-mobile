@@ -21,7 +21,9 @@
     "create": "Create",
     "noResults": "No items found",
     "tryDifferentSearch": "Try a different search term",
-    "savedSuccess": "Changes saved successfully!"
+    "savedSuccess": "Changes saved successfully!",
+    "retry": "Retry",
+    "error": "Error"
   },
   "nav": {
     "home": "Home",
@@ -331,6 +333,17 @@
       "What can I cook with what I have?": "You have chicken breast, rice, broccoli, and soy sauce in your pantry. How about **Garlic Soy Chicken & Broccoli**? About 25 minutes - I only added garlic to your shopping list.",
       "Plan dinners for the rest of this week": "Here's your plan - skipping spicy meals (Alex's preference) and using your expiring spinach:\n\n• Mon: Lemon herb chicken & rice\n• Tue: Spinach lasagna\n• Wed: Veggie stir-fry with tofu\n• Thu: Slow-cooker chili\n• Fri: Fish tacos (kid-friendly)\n\nAdded 6 items to your grocery list.",
       "Add chicken, rice, and broccoli to my pantry": "Done - updated your pantry:\n\n• +2 lb chicken breast\n• +1 bag rice\n• +1 head broccoli\n\nI'll prioritize these in your next meal plan."
-    }
+    },
+    "thinking": "Thinking…",
+    "approvalRestored": "I need your approval before making these changes.",
+    "approvalRequired": "Approval required before applying changes.",
+    "approveTitle": "Approve these changes?",
+    "approve": "Approve",
+    "reject": "Reject",
+    "networkError": "Network error. Please check your connection.",
+    "noResponse": "Sorry, I couldn't get a response. Please try again.",
+    "resumeError": "Could not resume the chat action.",
+    "loadError": "Couldn't load your conversation. Check your connection and try again.",
+    "send": "Send message"
   }
 }
