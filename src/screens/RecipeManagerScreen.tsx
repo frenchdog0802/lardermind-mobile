@@ -908,6 +908,9 @@ export default function RecipeManagerScreen() {
             <ScrollView
                 className="flex-1 p-4"
                 keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="interactive"
+                automaticallyAdjustKeyboardInsets
+                contentContainerStyle={{ paddingBottom: 24 }}
                 refreshControl={
                     <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.herb} colors={[colors.herb]} />
                 }

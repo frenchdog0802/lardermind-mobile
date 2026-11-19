@@ -8,6 +8,8 @@ import {
     TextInput,
     Alert,
     RefreshControl,
+    KeyboardAvoidingView,
+    Platform,
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useTranslation } from 'react-i18next';
@@ -668,7 +670,10 @@ export default function CalendarScreen() {
                 animationType="slide"
                 onRequestClose={() => setShowAddModal(false)}
             >
-                <View className="flex-1 justify-end bg-black/50">
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                    className="flex-1 justify-end bg-black/50"
+                >
                     <View className="bg-surface rounded-t-3xl p-6 max-h-[85%]">
                         <View className="flex-row justify-between items-center mb-5">
                             <Text className="text-xl font-bold text-ink">Add to Calendar</Text>
@@ -718,7 +723,11 @@ export default function CalendarScreen() {
                             />
                         </View>
 
-                        <ScrollView className="max-h-64 mb-6">
+                        <ScrollView
+                            className="max-h-64 mb-6"
+                            keyboardShouldPersistTaps="handled"
+                            keyboardDismissMode="interactive"
+                        >
                             {recipeList
                                 .filter((r) => r.meal_name?.toLowerCase().includes(searchQuery.toLowerCase()))
                                 .map((recipe) => (
@@ -751,7 +760,7 @@ export default function CalendarScreen() {
                             </TouchableOpacity>
                         </View>
                     </View>
-                </View>
+                </KeyboardAvoidingView>
             </Modal>
 
             {/* Delete Confirmation */}

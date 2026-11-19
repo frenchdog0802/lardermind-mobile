@@ -8,6 +8,8 @@ import {
     ScrollView,
     Alert,
     RefreshControl,
+    KeyboardAvoidingView,
+    Platform,
 } from 'react-native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useTranslation } from 'react-i18next';
@@ -441,6 +443,7 @@ export default function ShoppingListScreen() {
                             renderItem={renderItem}
                             keyExtractor={(item) => item.id.toString()}
                             contentContainerStyle={{ padding: 12 }}
+                            keyboardShouldPersistTaps="handled"
                             drawDistance={DRAW_DISTANCE}
                             refreshControl={
                                 <RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />
@@ -451,13 +454,20 @@ export default function ShoppingListScreen() {
             </View>
 
             <Modal visible={showReview} animationType="slide" transparent onRequestClose={() => setShowReview(false)}>
-                <View className="flex-1 justify-end bg-black/40">
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                    className="flex-1 justify-end bg-black/40"
+                >
                     <View className="bg-surface rounded-t-2xl max-h-[85%] border border-line">
                         <View className="p-4 border-b border-line">
                             <Text className="text-ink font-semibold text-lg">{t('shopping.syncReviewTitle')}</Text>
                             <Text className="text-muted text-sm mt-1">{t('shopping.syncNonFoodHint')}</Text>
                         </View>
-                        <ScrollView className="px-4">
+                        <ScrollView
+                            className="px-4"
+                            keyboardShouldPersistTaps="handled"
+                            keyboardDismissMode="interactive"
+                        >
                             {reviewDrafts.map((draft, idx) => (
                                 <View key={draft.id} className="py-3 border-b border-line">
                                     <TouchableOpacity
@@ -524,7 +534,7 @@ export default function ShoppingListScreen() {
                             </TouchableOpacity>
                         </View>
                     </View>
-                </View>
+                </KeyboardAvoidingView>
             </Modal>
         </View>
     );
