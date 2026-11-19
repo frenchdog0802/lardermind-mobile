@@ -4,7 +4,8 @@
  * This screen manages recipes and folders with full CRUD operations
  * connected to the backend API.
  */
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { FOCUS_STALE_MS } from '../hooks/useFocusRefresh';
 import {
     View,
     Text,
@@ -85,6 +86,7 @@ export default function RecipeManagerScreen() {
         userSettings,
         loading,
         loadingByResource,
+        errorByResource,
     } = usePantry();
     const measurementSystem = (userSettings.measurement_unit === 'imperial' ? 'imperial' : 'metric') as MeasurementSystem;
 
@@ -121,29 +123,52 @@ export default function RecipeManagerScreen() {
     // ========================================================================
     const [newRecipe, setNewRecipe] = useState<Partial<Recipe>>(createEmptyRecipeForm());
 
+    // Latest catalog for callbacks; refetch only when it is empty (it is loaded at login).
+    const ingredientsRef = useRef(ingredients);
+    ingredientsRef.current = ingredients;
+    const ensureIngredients = useCallback(() => {
+        if (ingredientsRef.current.length === 0) {
+            void fetchAllIngredients();
+        }
+    }, [fetchAllIngredients]);
+
     const openAddRecipeForm = useCallback((folderId = '') => {
         setSelectedRecipe(null);
         setIsEditing(false);
         setNewRecipe(createEmptyRecipeForm(folderId));
         setShowAddRecipe(true);
-        void fetchAllIngredients();
+        ensureIngredients();
         if (folderId) {
             setCurrentFolder((prev) => {
                 if (prev?.id === folderId) return prev;
                 return folders.find((f) => f.id === folderId) ?? prev;
             });
         }
-    }, [folders, fetchAllIngredients]);
+    }, [folders, ensureIngredients]);
 
     // ========================================================================
     // DATA - Refetch via pantryContext
     // ========================================================================
 
-    const loadData = useCallback(async () => {
+    const lastLoadedAtRef = useRef(0);
+
+    const loadData = useCallback(async (force = false) => {
+        // Focus refetch only when stale (~60 s); pull-to-refresh / Try Again force it.
+        if (!force && Date.now() - lastLoadedAtRef.current < FOCUS_STALE_MS) {
+            setHasLoadedOnce(true);
+            return;
+        }
+        lastLoadedAtRef.current = Date.now();
         setError(null);
         try {
-            await Promise.all([fetchAllFolders(), fetchAllRecipes(), fetchAllIngredients()]);
+            await Promise.all([
+                fetchAllFolders(),
+                fetchAllRecipes(),
+                // The ingredient catalog is loaded at login; only refetch when empty or forced.
+                force || ingredientsRef.current.length === 0 ? fetchAllIngredients() : Promise.resolve(),
+            ]);
         } catch (err) {
+            lastLoadedAtRef.current = 0;
             setError('Failed to load data. Please try again.');
             console.error('[RecipeManager] Load error:', err);
         } finally {
@@ -153,7 +178,7 @@ export default function RecipeManagerScreen() {
 
     const handleRefresh = useCallback(async () => {
         setRefreshing(true);
-        await loadData();
+        await loadData(true);
         setRefreshing(false);
     }, [loadData]);
 
@@ -642,8 +667,8 @@ export default function RecipeManagerScreen() {
     const handleEditRecipe = useCallback((r: Recipe) => {
         setSelectedRecipe(r);
         setIsEditing(true);
-        void fetchAllIngredients();
-    }, [fetchAllIngredients]);
+        ensureIngredients();
+    }, [ensureIngredients]);
 
     /**
      * Render folder card
@@ -749,15 +774,19 @@ export default function RecipeManagerScreen() {
     // ========================================================================
     // ERROR STATE
     // ========================================================================
-    if (error) {
+    const loadFailed =
+        Boolean(errorByResource?.recipes) &&
+        (Array.isArray(recipes) ? recipes : []).length === 0 &&
+        hasLoadedOnce;
+    if (error || loadFailed) {
         return (
             <View className="flex-1 bg-linen">
                 {recipeHeader}
                 <View className="flex-1 items-center justify-center p-6">
                     <AlertCircleIcon size={48} color={colors.danger} />
-                    <Text className="text-ink text-lg mt-4 text-center">{error}</Text>
+                    <Text className="text-ink text-lg mt-4 text-center">{error ?? t('common.loadError')}</Text>
                     <TouchableOpacity
-                        onPress={loadData}
+                        onPress={() => void loadData(true)}
                         className="mt-6 bg-herb px-6 py-3 rounded-xl"
                     >
                         <Text className="text-white font-medium">Try Again</Text>
