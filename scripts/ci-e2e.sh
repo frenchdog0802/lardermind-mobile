@@ -26,12 +26,27 @@ fi
 TAG_ARGS=()
 if [ -n "$EXCLUDE" ]; then TAG_ARGS+=(--exclude-tags="$EXCLUDE"); fi
 
-mkdir -p maestro-out
+mkdir -p maestro-out/shots
+
+# Record the whole run: logcat plus a screenshot every few seconds (small files, readable timeline).
+adb logcat -c || true
+adb logcat -v time > maestro-out/logcat-full.txt 2>&1 &
+LOGCAT_PID=$!
+(
+  n=0
+  while true; do
+    n=$((n + 1))
+    adb exec-out screencap -p > "maestro-out/shots/$(printf '%04d' "$n")-$(date +%H%M%S).png" 2>/dev/null || true
+    sleep 6
+  done
+) &
+SHOTS_PID=$!
 
 set +e
 maestro test "${ENV_ARGS[@]}" "${TAG_ARGS[@]}"   --format=junit --output=maestro-out/report.xml   --debug-output=maestro-out/debug   .maestro
 STATUS=$?
 set -e
+kill "$SHOTS_PID" "$LOGCAT_PID" 2>/dev/null || true
 
 if [ "$STATUS" -ne 0 ]; then
   echo "[ci-e2e] Maestro failed (exit $STATUS); collecting diagnostics"
