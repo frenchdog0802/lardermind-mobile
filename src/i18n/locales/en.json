@@ -107,7 +107,13 @@
     "googleSignUpFailed": "Google sign up failed",
     "googleSignUpRetry": "Google sign up failed. Please try again.",
     "googleSignUpCancelled": "Google sign up was cancelled or failed.",
-    "logIn": "Log in"
+    "logIn": "Log in",
+    "tryWithoutAccount": "Try without an account",
+    "tryWithoutAccountHint": "Paste a fridge list and see what you can cook",
+    "guestFailed": "Could not start guest session. Please try again.",
+    "guestBanner": "Guest trial — save to keep pantry, recipes & this chat",
+    "guestBannerCta": "Save kitchen",
+    "signupRequired": "Sign up to save your kitchen and use planning or shopping."
   },
   "settings": {
     "title": "Settings",
@@ -136,6 +142,10 @@
     "measurementUnits": "Measurement units",
     "imperial": "Imperial (oz, lb, cups)",
     "metric": "Metric (g, kg, ml)",
+    "assumeBasicSeasonings": "Assume basic seasonings at home",
+    "assumeBasicSeasoningsHint": "When on, recipes missing only oil, salt, soy, sugar, etc. are suggested as cookable if you have those staples.",
+    "on": "On",
+    "off": "Off",
     "loadPrefsError": "Could not load preferences.",
     "savePrefsError": "Could not save preferences.",
     "themeSettings": "Theme Settings",
@@ -279,6 +289,8 @@
     "instructions": "Instructions",
     "preferencesSaved": "Preferences saved",
     "mealSuggestions": "Meal suggestions",
+    "defineUnitTitle": "Set unit conversion",
+    "defineUnitSaved": "Saved",
     "placeholder": "Ask anything...",
     "welcome": "Pick a suggestion below, or just type what you need.",
     "greetingMorning": "Good morning",
@@ -286,25 +298,27 @@
     "greetingEvening": "Good evening",
     "newChat": "New chat",
     "clearChat": "Clear",
-    "emptyHint": "Skip the forms - just tell the AI what you need.",
+    "emptyHint": "Skip the forms — paste your fridge or shopping list and I’ll suggest what you can cook.",
     "emptyCta": {
       "pantry": "Ask AI to update pantry",
       "shopping": "Ask AI to build a list",
       "recipes": "Ask AI to import a recipe",
-      "calendar": "Ask AI to plan this week"
+      "calendar": "Ask AI to plan this week",
+      "pasteList": "Ask AI with a pasted list"
     },
     "emptyPrompts": {
       "pantry": "Add chicken, rice, and broccoli to my pantry",
       "shopping": "Add milk, eggs, and bread to my shopping list",
       "recipes": "Import a recipe from a URL (website, YouTube, or Instagram)",
       "calendar": "Plan dinners for the rest of this week",
-      "cook": "What can I cook with what I have?"
+      "cook": "What can I cook with what I have?",
+      "pasteList": "Here’s what’s in my fridge:\n- chicken breast\n- rice\n- broccoli\n- soy sauce\n\nAdd these to my pantry, suggest recipes I can make, then tell me what I can cook."
     },
     "suggestedPrompts": [
+      "Here’s what’s in my fridge:\n- chicken breast\n- rice\n- broccoli\n- soy sauce\n\nAdd these to my pantry, suggest recipes I can make, then tell me what I can cook.",
       "What can I cook with what I have?",
       "Plan dinners for the rest of this week",
-      "Import a recipe from a URL (website, YouTube, or Instagram)",
-      "Add chicken, rice, and broccoli to my pantry"
+      "Import a recipe from a URL (website, YouTube, or Instagram)"
     ],
     "demoWelcome": "Try a prompt below, or type your own.",
     "demoSuggestedPrompts": [

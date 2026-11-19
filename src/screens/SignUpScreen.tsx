@@ -52,6 +52,11 @@ export default function SignUpScreen() {
 
       if (!response.success) {
         setError(response.message || t('auth.signUpFailed'));
+      } else {
+        // SaveKitchen (guest upgrade): return to Chat. Auth-stack signup remounts Main on its own.
+        if (navigation.getState()?.routeNames?.includes('Chat')) {
+          navigation.navigate('Chat' as never);
+        }
       }
     } catch {
       setError(t('auth.genericError'));
@@ -63,6 +68,9 @@ export default function SignUpScreen() {
     try {
       const result = await loginWithGoogle();
       if (result.success) {
+        if (navigation.getState()?.routeNames?.includes('Chat')) {
+          navigation.navigate('Chat' as never);
+        }
         return;
       }
       if (result.message === 'cancelled') {

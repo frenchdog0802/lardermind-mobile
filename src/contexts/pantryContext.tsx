@@ -48,6 +48,7 @@ import {
     enrichPantryNames,
     enrichShoppingNames,
 } from '../utils/fillMissingNames';
+import { serializeRecipePayload } from '../utils/recipePayload';
 
 type ResourceLoading = {
     recipes: boolean;
@@ -149,37 +150,6 @@ function normalizeMealPlan(raw: Record<string, unknown> | MealPlan): MealPlan {
             ?? ((record.image_url as { url?: string } | undefined)?.url ?? null),
         status,
     };
-}
-
-/** Backend expects instructions as a single string. */
-function serializeRecipeForApi(recipe: Partial<Recipe>): Record<string, unknown> {
-    const instructions = recipe.instructions;
-    const ingredients = (recipe.ingredients ?? [])
-        .filter((ing) => ing.name?.trim())
-        .map((ing) => ({
-            name: ing.name.trim(),
-            quantity: Number(ing.quantity) || 1,
-            unit: ing.unit?.trim() || undefined,
-            ingredient_id: ing.ingredient_id,
-        }));
-
-    const payload: Record<string, unknown> = {
-        meal_name: recipe.meal_name?.trim(),
-        instructions: Array.isArray(instructions)
-            ? instructions.filter(Boolean).join('\n')
-            : instructions ?? '',
-        ingredients,
-    };
-
-    if (recipe.folder_id?.trim()) {
-        payload.folder_id = recipe.folder_id.trim();
-    }
-
-    if (recipe.image?.url) {
-        payload.image_url = recipe.image.url;
-    }
-
-    return payload;
 }
 
 interface PantryContextType {
@@ -456,7 +426,7 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
     }, [setResourceLoading]);
 
     const addRecipe = useCallback(async (recipe: Partial<Recipe>): Promise<ApiResponse<Recipe>> => {
-        const response = await recipeApi.create(serializeRecipeForApi(recipe) as Partial<Recipe>);
+        const response = await recipeApi.create(serializeRecipePayload(recipe) as Partial<Recipe>);
         if (response.success && response.data) {
             const raw = response.data as unknown;
             const payload = (raw && typeof raw === 'object' && 'recipe' in (raw as object)
@@ -472,7 +442,7 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
     const updateRecipe = useCallback(async (recipe: Recipe) => {
         const normalized = normalizeRecipe(recipe);
         setRecipes((prev) => prev.map((r) => (r.id === recipe.id ? normalized : r)));
-        const response = await recipeApi.update(recipe.id, serializeRecipeForApi(normalized) as Partial<Recipe>);
+        const response = await recipeApi.update(recipe.id, serializeRecipePayload(normalized) as Partial<Recipe>);
         if (response.success && response.data) {
             const raw = response.data as unknown;
             const payload = (raw && typeof raw === 'object' && 'recipe' in (raw as object)

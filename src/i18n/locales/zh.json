@@ -107,7 +107,13 @@
     "googleSignUpFailed": "Google 註冊失敗",
     "googleSignUpRetry": "Google 註冊失敗，請再試一次。",
     "googleSignUpCancelled": "已取消或 Google 註冊失敗。",
-    "logIn": "登入"
+    "logIn": "登入",
+    "tryWithoutAccount": "不建立帳號先試用",
+    "tryWithoutAccountHint": "貼上冰箱清單，看看能煮什麼",
+    "guestFailed": "無法開始訪客試用，請再試一次。",
+    "guestBanner": "訪客試用 — 註冊可保留冰箱、食譜與這次對話",
+    "guestBannerCta": "保存廚房",
+    "signupRequired": "註冊後才能保存廚房，並使用排程或購物功能。"
   },
   "settings": {
     "title": "設定",
@@ -136,6 +142,10 @@
     "measurementUnits": "計量單位",
     "imperial": "英制（oz、lb、cups）",
     "metric": "公制（g、kg、ml）",
+    "assumeBasicSeasonings": "預設家裡有基本調味料",
+    "assumeBasicSeasoningsHint": "開啟後，若食譜只缺油、鹽、醬油、糖等基本調味，會以「若有這些調味料即可煮」建議，而非直接判定不能煮。",
+    "on": "開啟",
+    "off": "關閉",
     "loadPrefsError": "無法載入偏好設定。",
     "savePrefsError": "無法儲存偏好設定。",
     "themeSettings": "主題設定",
@@ -279,6 +289,8 @@
     "instructions": "作法",
     "preferencesSaved": "偏好已儲存",
     "mealSuggestions": "餐點建議",
+    "defineUnitTitle": "設定單位換算",
+    "defineUnitSaved": "已儲存",
     "placeholder": "問我任何事...",
     "welcome": "點選下方建議，或直接輸入你想做的事。",
     "greetingMorning": "早安",
@@ -286,25 +298,27 @@
     "greetingEvening": "晚安",
     "newChat": "新對話",
     "clearChat": "清除",
-    "emptyHint": "不用自己填表單 - 直接跟 AI 說你要什麼。",
+    "emptyHint": "不用自己填表單 — 貼上冰箱或購物清單，我就幫你建議能煮什麼。",
     "emptyCta": {
       "pantry": "請 AI 更新冰箱",
       "shopping": "請 AI 建立購物清單",
       "recipes": "請 AI 匯入食譜",
-      "calendar": "請 AI 規劃本週"
+      "calendar": "請 AI 規劃本週",
+      "pasteList": "貼清單請 AI 幫忙"
     },
     "emptyPrompts": {
       "pantry": "把雞胸肉、米和花椰菜加入冰箱",
       "shopping": "把牛奶、雞蛋和麵包加入購物清單",
       "recipes": "從網址匯入食譜（網站、YouTube 或 Instagram）",
       "calendar": "幫我規劃這週剩下的晚餐",
-      "cook": "我現有的食材可以煮什麼？"
+      "cook": "我現有的食材可以煮什麼？",
+      "pasteList": "我冰箱裡有：\n- 雞胸肉\n- 米\n- 花椰菜\n- 醬油\n\n請加入食材庫，建議可用食譜，再告訴我能煮什麼。"
     },
     "suggestedPrompts": [
+      "我冰箱裡有：\n- 雞胸肉\n- 米\n- 花椰菜\n- 醬油\n\n請加入食材庫，建議可用食譜，再告訴我能煮什麼。",
       "我現有的食材可以煮什麼？",
       "幫我規劃這週剩下的晚餐",
-      "從網址匯入食譜（網站、YouTube 或 Instagram）",
-      "把雞胸肉、米和花椰菜加入冰箱"
+      "從網址匯入食譜（網站、YouTube 或 Instagram）"
     ],
     "demoWelcome": "試試下方提示，或自己輸入。",
     "demoSuggestedPrompts": [

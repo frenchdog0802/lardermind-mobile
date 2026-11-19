@@ -21,6 +21,7 @@ export default function SettingsScreen() {
   const [units, setUnits] = useState(
     userSettings.measurement_unit === 'imperial' ? 'imperial' : 'metric',
   );
+  const [assumeBasicSeasonings, setAssumeBasicSeasonings] = useState(true);
   const [language, setLanguage] = useState<AppLanguage>(
     i18n.language?.startsWith('zh') ? 'zh' : 'en',
   );
@@ -34,12 +35,15 @@ export default function SettingsScreen() {
     (async () => {
       try {
         const prefs = await userPreferencesApi.get();
-        if (!cancelled && prefs?.measurementUnit) {
-          setUnits(prefs.measurementUnit);
-          updateUserSettings({
-            ...userSettings,
-            measurement_unit: prefs.measurementUnit,
-          });
+        if (!cancelled && prefs) {
+          if (prefs.measurementUnit) {
+            setUnits(prefs.measurementUnit);
+            updateUserSettings({
+              ...userSettings,
+              measurement_unit: prefs.measurementUnit,
+            });
+          }
+          setAssumeBasicSeasonings(prefs.assumeBasicSeasonings !== false);
         }
       } catch {
         // ignore load errors on settings open
@@ -68,7 +72,10 @@ export default function SettingsScreen() {
     setErrorMessage('');
     try {
       const measurementUnit = units === 'imperial' ? 'imperial' : 'metric';
-      const saved = await userPreferencesApi.update({ measurementUnit });
+      const saved = await userPreferencesApi.update({
+        measurementUnit,
+        assumeBasicSeasonings,
+      });
       if (!saved) {
         setErrorMessage(t('settings.savePrefsError'));
         return;
@@ -77,6 +84,7 @@ export default function SettingsScreen() {
         ...userSettings,
         measurement_unit: saved.measurementUnit,
       });
+      setAssumeBasicSeasonings(saved.assumeBasicSeasonings !== false);
       setShowSaveMessage(true);
       setTimeout(() => {
         setShowSaveMessage(false);
@@ -222,6 +230,38 @@ export default function SettingsScreen() {
                       onPress={() => setUnits('metric')}
                       label={t('settings.metric')}
                     />
+                  </View>
+                  <Text className="text-lg font-semibold text-ink mb-2 mt-6">
+                    {t('settings.assumeBasicSeasonings')}
+                  </Text>
+                  <Text className="text-sm text-muted mb-3">
+                    {t('settings.assumeBasicSeasoningsHint')}
+                  </Text>
+                  <View className="flex-row gap-2 mb-2">
+                    <TouchableOpacity
+                      onPress={() => setAssumeBasicSeasonings(true)}
+                      className={`flex-1 py-3 rounded-lg border ${
+                        assumeBasicSeasonings
+                          ? 'bg-sage border-herb'
+                          : 'bg-linen border-line'
+                      }`}
+                    >
+                      <Text className="text-center text-ink font-medium">
+                        {t('settings.on')}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => setAssumeBasicSeasonings(false)}
+                      className={`flex-1 py-3 rounded-lg border ${
+                        !assumeBasicSeasonings
+                          ? 'bg-sage border-herb'
+                          : 'bg-linen border-line'
+                      }`}
+                    >
+                      <Text className="text-center text-ink font-medium">
+                        {t('settings.off')}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                   <TouchableOpacity
                     onPress={handleSave}

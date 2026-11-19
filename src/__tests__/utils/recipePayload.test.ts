@@ -5,23 +5,37 @@ import {
 } from '../../utils/recipePayload';
 
 describe('serializeRecipePayload', () => {
-    it('omits empty folder_id and maps image to image_url', () => {
+    it('omits empty folder_id and maps image to image_url + image_public_id', () => {
         const payload = serializeRecipePayload({
             meal_name: 'Pasta',
             folder_id: '',
             ingredients: [{ name: 'Tomato', quantity: 2, unit: 'pcs' }],
             instructions: ['Boil water', 'Cook pasta'],
-            image: { url: 'https://example.com/pasta.jpg', public_id: '' },
+            image: {
+                url: 'https://example.com/api/media/u1/pasta.jpg',
+                public_id: 'u1/pasta.jpg',
+            },
         });
 
         expect(payload).toEqual({
             meal_name: 'Pasta',
             instructions: 'Boil water\nCook pasta',
             ingredients: [{ name: 'Tomato', quantity: 2, unit: 'pcs' }],
-            image_url: 'https://example.com/pasta.jpg',
+            image_url: 'https://example.com/api/media/u1/pasta.jpg',
+            image_public_id: 'u1/pasta.jpg',
         });
         expect(payload.folder_id).toBeUndefined();
         expect(payload.image).toBeUndefined();
+    });
+
+    it('clears image fields when image is null', () => {
+        const payload = serializeRecipePayload({
+            meal_name: 'Soup',
+            ingredients: [{ name: 'Water', quantity: 1, unit: 'cup' }],
+            image: null,
+        });
+        expect(payload.image_url).toBe('');
+        expect(payload.image_public_id).toBe('');
     });
 
     it('filters blank ingredient rows', () => {

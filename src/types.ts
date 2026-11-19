@@ -17,6 +17,8 @@ export type User = {
     name: string;
     email: string;
     token?: string;
+    /** Ephemeral guest trial (first-win bootstrap). */
+    is_guest?: boolean;
 };
 
 export interface UserSettings {
@@ -34,6 +36,8 @@ export interface UserPreferences {
     householdNotes: string;
     measurementUnit: 'metric' | 'imperial';
     notes: string;
+    /** When true, suggest path treats default staples as assumable. Default true. */
+    assumeBasicSeasonings?: boolean;
 }
 
 export interface IngredientEntry {

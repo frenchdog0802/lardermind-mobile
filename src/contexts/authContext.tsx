@@ -24,8 +24,10 @@ interface AuthContextType {
     signUp: (user: User, password: string) => Promise<AuthResponse>;
     login: (email: string, password: string) => Promise<AuthResponse>;
     loginWithGoogle: () => Promise<AuthResponse>;
+    continueAsGuest: () => Promise<AuthResponse>;
     logout: () => Promise<void>;
     isAuthenticated: boolean;
+    isGuest: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -96,21 +98,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await AsyncStorage.setItem('user', JSON.stringify(nextUser));
     };
 
+    /** If current session is guest, return JWT for claim-on-signup. */
+    const takeGuestTokenIfPresent = async (): Promise<string | null> => {
+        if (!userRef.current?.is_guest) return null;
+        return authHelper.getJWT();
+    };
+
     const signUp = async (userData: User, password: string): Promise<AuthResponse> => {
         setSubmitting(true);
         const authResponse: AuthResponse = { success: false };
 
         try {
+            const guestToken = await takeGuestTokenIfPresent();
             if (__DEV__) {
                 console.log('[auth] signup start', userData.email);
             }
-            const response = await auth.signup(userData, password);
+            const response = await auth.signup(userData, password, guestToken);
             if (__DEV__) {
                 console.log('[auth] signup response', response?.success, response?.message);
             }
 
             if (response && response.success && response.data) {
-                await persistSession(response.data.token, response.data.user);
+                await persistSession(response.data.token, {
+                    ...response.data.user,
+                    is_guest: false,
+                });
                 authResponse.success = true;
             } else {
                 authResponse.success = false;
@@ -131,16 +143,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const authResponse: AuthResponse = { success: false };
 
         try {
+            const guestToken = await takeGuestTokenIfPresent();
             if (__DEV__) {
                 console.log('[auth] login start', email);
             }
-            const response = await auth.signin(email, password);
+            const response = await auth.signin(email, password, guestToken);
             if (__DEV__) {
                 console.log('[auth] login response', response?.success, response?.message);
             }
 
             if (response && response.data && response.success) {
-                await persistSession(response.data.token, response.data.user);
+                await persistSession(response.data.token, {
+                    ...response.data.user,
+                    is_guest: false,
+                });
                 authResponse.success = true;
             } else {
                 authResponse.success = false;
@@ -161,17 +177,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const authResponse: AuthResponse = { success: false };
 
         try {
+            const guestToken = await takeGuestTokenIfPresent();
             const idToken = await signInForIdToken();
             if (__DEV__) {
                 console.log('[auth] google login start');
             }
-            const response = await auth.googleLogin(idToken);
+            const response = await auth.googleLogin(idToken, guestToken);
             if (__DEV__) {
                 console.log('[auth] google login response', response?.success, response?.message);
             }
 
             if (response && response.success && response.data) {
-                await persistSession(response.data.token, response.data.user);
+                await persistSession(response.data.token, {
+                    ...response.data.user,
+                    is_guest: false,
+                });
                 authResponse.success = true;
             } else {
                 authResponse.success = false;
@@ -194,6 +214,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return authResponse;
     };
 
+    const continueAsGuest = async (): Promise<AuthResponse> => {
+        setSubmitting(true);
+        const authResponse: AuthResponse = { success: false };
+        try {
+            const response = await auth.mintGuest();
+            if (response?.success && response.data?.token) {
+                const guestUser: User = {
+                    ...response.data.user,
+                    name: response.data.user.name || 'Guest',
+                    first_name: response.data.user.first_name || 'Guest',
+                    last_name: response.data.user.last_name || '',
+                    email: response.data.user.email || '',
+                    is_guest: true,
+                };
+                await persistSession(response.data.token, guestUser);
+                authResponse.success = true;
+            } else {
+                authResponse.message = response?.message || 'Guest session failed';
+            }
+        } catch (error) {
+            console.error('Error minting guest:', error);
+            authResponse.message = 'Could not start guest session';
+        } finally {
+            setSubmitting(false);
+        }
+        return authResponse;
+    };
+
+    const isGuest = Boolean(user?.is_guest);
+
     const value = useMemo(
         () => ({
             user,
@@ -202,11 +252,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             loading: initializing,
             login,
             loginWithGoogle,
+            continueAsGuest,
             logout,
             isAuthenticated: !!user,
+            isGuest,
             signUp,
         }),
-        [user, initializing, submitting, logout],
+        [user, initializing, submitting, logout, isGuest],
     );
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

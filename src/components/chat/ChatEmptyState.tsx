@@ -2,7 +2,6 @@ import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../contexts/authContext';
-import { usePantry } from '../../contexts/pantryContext';
 import { greetingPeriodNow } from '../../utils/chatGreeting';
 
 interface ChatEmptyStateProps {
@@ -19,7 +18,6 @@ export default function ChatEmptyState({
 }: ChatEmptyStateProps) {
   const { t } = useTranslation();
   const { user } = useAuth();
-  const { pantryItems, shoppingList } = usePantry();
 
   const period = greetingPeriodNow(now);
   const greetingKey =
@@ -35,11 +33,6 @@ export default function ChatEmptyState({
     ? t('home.welcomeBack', { name: displayName })
     : periodGreeting;
 
-  const pantryCount = Array.isArray(pantryItems) ? pantryItems.length : 0;
-  const buyCount = (Array.isArray(shoppingList) ? shoppingList : []).filter(
-    (item) => !item.checked,
-  ).length;
-
   return (
     <View className="flex-1 items-center justify-center px-8 py-6" testID="chat-empty-state">
       <Text className="font-display text-2xl font-semibold text-ink text-center mb-2">
@@ -48,11 +41,9 @@ export default function ChatEmptyState({
       {displayName ? (
         <Text className="font-display text-lg text-ink text-center mb-3">{periodGreeting}</Text>
       ) : null}
-      <Text className="text-muted text-center text-base mb-6">{t('ai.welcome')}</Text>
-      <View className="items-center gap-1 mb-8">
-        <Text className="text-sm text-muted">{t('home.pantryCount', { count: pantryCount })}</Text>
-        <Text className="text-sm text-muted">{t('home.buyCount', { count: buyCount })}</Text>
-      </View>
+      <Text className="text-muted text-center text-base mb-6" testID="chat-empty-hint">
+        {t('ai.emptyHint')}
+      </Text>
       {suggestedPrompts.length > 0 && onSelectPrompt ? (
         <View className="w-full max-w-sm gap-2" testID="chat-empty-suggestions">
           {suggestedPrompts.map((prompt) => (
@@ -63,7 +54,9 @@ export default function ChatEmptyState({
               accessibilityRole="button"
               accessibilityLabel={prompt}
             >
-              <Text className="text-herb-deep text-sm text-center">{prompt}</Text>
+              <Text className="text-herb-deep text-sm text-center" numberOfLines={3}>
+                {prompt.length > 80 ? `${prompt.slice(0, 77)}…` : prompt}
+              </Text>
             </TouchableOpacity>
           ))}
         </View>

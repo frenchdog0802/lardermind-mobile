@@ -129,8 +129,12 @@ export function serializeRecipePayload(recipe: Partial<Recipe>): Record<string, 
         payload.folder_id = recipe.folder_id.trim();
     }
 
-    if (recipe.image?.url) {
+    if (recipe.image === null) {
+        payload.image_url = '';
+        payload.image_public_id = '';
+    } else if (recipe.image?.url) {
         payload.image_url = recipe.image.url;
+        payload.image_public_id = recipe.image.public_id ?? '';
     }
 
     return payload;

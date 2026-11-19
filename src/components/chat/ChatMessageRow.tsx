@@ -1,8 +1,23 @@
-import React, { memo, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Animated } from 'react-native';
+import React, { memo, useEffect, useRef, useState } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ActivityIndicator,
+  Animated,
+  TextInput,
+} from 'react-native';
+import { useTranslation } from 'react-i18next';
 import ChatMessageContent from '../ChatMessageContent';
 import type { ChatResponseType } from '../../api/chat';
 import { colors } from '../../theme/tokens';
+
+export type DefineUnitAction = {
+  action_required: 'define_unit';
+  item: string;
+  from_unit: string;
+  to_unit: string;
+};
 
 export type ChatCardData = {
   recipeId?: string;
@@ -19,9 +34,16 @@ export type ChatCardData = {
   meals?: Array<{ meal_name?: string; serving_date?: string; meal_type?: string }>;
   mergedGroups?: number;
   removedDuplicates?: number;
-  suggestions?: Array<{ recipeId?: string; recipeName?: string; matchScore?: number }>;
+  suggestions?: Array<{
+    recipeId?: string;
+    recipeName?: string;
+    matchScore?: number;
+    cookStatus?: string;
+    /** Legacy backend field; prefer recipeName */
+    meal_name?: string;
+  }>;
   actionCount?: number;
-  actions?: Array<Record<string, unknown>>;
+  actions?: Array<Record<string, unknown> | DefineUnitAction>;
   message?: string;
 };
 
@@ -54,7 +76,77 @@ type ChatMessageRowProps = {
   approvalBusy?: boolean;
   onApprove?: () => void;
   onReject?: () => void;
+  onDefineUnit?: (action: DefineUnitAction, ratio: number) => void | Promise<void>;
+  defineUnitBusy?: boolean;
 };
+
+function isDefineUnitAction(raw: unknown): raw is DefineUnitAction {
+  if (!raw || typeof raw !== 'object') return false;
+  const o = raw as Record<string, unknown>;
+  return (
+    o.action_required === 'define_unit' &&
+    typeof o.item === 'string' &&
+    typeof o.from_unit === 'string' &&
+    typeof o.to_unit === 'string'
+  );
+}
+
+function DefineUnitCard({
+  action,
+  busy,
+  onSubmit,
+}: {
+  action: DefineUnitAction;
+  busy?: boolean;
+  onSubmit?: (action: DefineUnitAction, ratio: number) => void | Promise<void>;
+}) {
+  const { t } = useTranslation();
+  const [ratioText, setRatioText] = useState('');
+  const [saved, setSaved] = useState(false);
+  const ratio = Number(ratioText);
+  const canSubmit = Number.isFinite(ratio) && ratio > 0 && !busy && !saved;
+
+  return (
+    <View className="mt-3 bg-surface rounded-lg p-3 border border-line">
+      <Text className="text-sm font-medium text-ink mb-2">
+        {t('ai.defineUnitTitle')}
+      </Text>
+      <View className="flex-row items-center flex-wrap gap-1 mb-2">
+        <Text className="text-sm text-ink">
+          1 {action.from_unit} {action.item} =
+        </Text>
+        <TextInput
+          value={ratioText}
+          onChangeText={setRatioText}
+          keyboardType="decimal-pad"
+          editable={!saved && !busy}
+          placeholder="___"
+          className="min-w-[64px] px-2 py-1 border border-line rounded-md bg-linen text-ink text-sm"
+        />
+        <Text className="text-sm text-ink">{action.to_unit}</Text>
+      </View>
+      <TouchableOpacity
+        disabled={!canSubmit}
+        onPress={async () => {
+          if (!canSubmit || !onSubmit) return;
+          await onSubmit(action, ratio);
+          setSaved(true);
+        }}
+        className={`py-2 rounded-lg items-center ${
+          canSubmit ? 'bg-herb' : 'bg-sage border border-line'
+        }`}
+      >
+        <Text
+          className={`text-sm font-medium ${
+            canSubmit ? 'text-white' : 'text-muted'
+          }`}
+        >
+          {saved ? t('ai.defineUnitSaved') : t('common.confirm')}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
 
 /** Compat: older cardData nested `{ recipe }`; current API uses flat fields. */
 function normalizeRecipeCardData(cardData?: ChatCardData): ChatCardData {
@@ -119,6 +211,8 @@ function ChatMessageRowComponent({
   approvalBusy = false,
   onApprove,
   onReject,
+  onDefineUnit,
+  defineUnitBusy = false,
 }: ChatMessageRowProps) {
   const isUser = item.role === 'user';
   const showStreamingPlaceholder = Boolean(item.streaming && !item.content);
@@ -297,11 +391,33 @@ function ChatMessageRowComponent({
         {item.type === 'meal_suggestions' && item.cardData ? (
           <View className="mt-3 bg-linen rounded-xl p-4 border border-line">
             <Text className="font-medium text-ink mb-2">Meal suggestions</Text>
-            {(item.cardData.suggestions ?? []).map((s, index) => (
+            {(item.cardData.suggestions ?? []).map((s, index) => {
+              const name = s.recipeName ?? s.meal_name;
+              const pct = s.matchScore;
+              const status =
+                s.cookStatus === 'conditionally_cookable'
+                  ? ' · if staples'
+                  : s.cookStatus === 'cookable'
+                    ? ' · cookable'
+                    : '';
+              return (
               <Text key={index} className="text-sm text-muted">
-                {s.recipeName} - {s.matchScore}% match
+                {name}
+                {pct != null ? ` - ${pct}% match` : ''}
+                {status}
               </Text>
-            ))}
+              );
+            })}
+            {(item.cardData.actions ?? [])
+              .filter(isDefineUnitAction)
+              .map((action, index) => (
+                <DefineUnitCard
+                  key={`${action.item}-${action.from_unit}-${action.to_unit}-${index}`}
+                  action={action}
+                  busy={defineUnitBusy}
+                  onSubmit={onDefineUnit}
+                />
+              ))}
             <TouchableOpacity
               onPress={onViewCalendar}
               className="mt-3 bg-sage py-2 rounded-lg items-center border border-line"

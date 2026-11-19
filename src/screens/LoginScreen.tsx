@@ -21,8 +21,22 @@ export default function LoginScreen({ onLoginSuccess, onSignUp }: LoginProps = {
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
 
-  const { login, loginWithGoogle, submitting } = useAuth();
+  const { login, loginWithGoogle, continueAsGuest, submitting } = useAuth();
   const showGoogle = Platform.OS === 'android';
+
+  const handleTryGuest = async () => {
+    setError('');
+    try {
+      const result = await continueAsGuest();
+      if (result.success) {
+        onLoginSuccess?.();
+      } else {
+        setError(result.message || t('auth.guestFailed'));
+      }
+    } catch {
+      setError(t('auth.guestFailed'));
+    }
+  };
 
   const handleSubmit = async () => {
     if (!email || !password) {
@@ -152,6 +166,16 @@ export default function LoginScreen({ onLoginSuccess, onSignUp }: LoginProps = {
                 />
               </>
             ) : null}
+
+            <TouchableOpacity
+              onPress={() => void handleTryGuest()}
+              disabled={submitting}
+              className="mb-6 py-3 rounded-lg border border-line bg-surface items-center"
+              testID="login-try-guest"
+            >
+              <Text className="text-sm font-medium text-ink">{t('auth.tryWithoutAccount')}</Text>
+              <Text className="text-xs text-muted mt-1">{t('auth.tryWithoutAccountHint')}</Text>
+            </TouchableOpacity>
 
             <View className="items-center">
               <Text className="text-sm text-muted">

@@ -66,6 +66,13 @@ describe('chatApi.streamSend', () => {
         );
 
         expect(expoFetch).toHaveBeenCalled();
+        const fetchArg = (expoFetch as jest.Mock).mock.calls[0]?.[1] as {
+            body?: string;
+        };
+        const body = JSON.parse(String(fetchArg?.body ?? '{}')) as {
+            clientLocalDate?: string;
+        };
+        expect(body.clientLocalDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
         expect(global.fetch).not.toHaveBeenCalled();
         expect(onError).not.toHaveBeenCalled();
         expect(onDone).toHaveBeenCalledWith(donePayload);

@@ -22,11 +22,14 @@ import {
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePantry } from '../contexts/pantryContext';
+import { useAuth } from '../contexts/authContext';
 import AppHeader from '../components/AppHeader';
 import { ChatMessageRow } from '../components/chat/ChatMessageRow';
 import ChatEmptyState from '../components/chat/ChatEmptyState';
 import { chatApi, ChatResponseData, ChatResponseType, HistoryMessage, PendingToolSummary } from '../api/chat';
 import { mealPlanApi } from '../api/mealPlan';
+import { unitConversionsApi } from '../api/unitConversions';
+import type { DefineUnitAction } from '../components/chat/ChatMessageRow';
 import { colors } from '../theme/tokens';
 import { SkeletonList } from '../components/ui/Skeleton';
 import { DRAW_DISTANCE } from '../constants/listPerf';
@@ -89,6 +92,7 @@ export default function AICookingAssistantScreen() {
         fetchAllPantryItems,
         fetchAllMealPlans,
     } = usePantry();
+    const { isGuest } = useAuth();
     const flatListRef = useRef<FlashListRef<Message>>(null);
     const nearBottomRef = useRef(true);
     const [historyReady, setHistoryReady] = useState(false);
@@ -342,10 +346,13 @@ export default function AICookingAssistantScreen() {
         await Promise.all(tasks);
     };
 
-    const handleSend = async () => {
-        if (!input.trim() || isTyping || pendingApproval) return;
+    const sendChatMessage = async (
+        userMessageContent: string,
+        opts?: { hidden?: boolean },
+    ) => {
+        if (!userMessageContent.trim() || isTyping || pendingApproval) return;
 
-        const userMessageContent = input.trim();
+        const hidden = Boolean(opts?.hidden);
         const userMessage: Message = {
             id: `user-${Date.now()}`,
             role: 'user',
@@ -362,9 +369,13 @@ export default function AICookingAssistantScreen() {
             statusText: 'Thinking…',
         };
 
-        setMessages((prev) => [...prev, userMessage, streamingMessage]);
-        setInput('');
-        setInputHeight(INPUT_MIN_HEIGHT);
+        setMessages((prev) =>
+            hidden ? [...prev, streamingMessage] : [...prev, userMessage, streamingMessage],
+        );
+        if (!hidden) {
+            setInput('');
+            setInputHeight(INPUT_MIN_HEIGHT);
+        }
         setIsTyping(true);
         nearBottomRef.current = true;
         requestAnimationFrame(() => {
@@ -464,12 +475,26 @@ export default function AICookingAssistantScreen() {
                         }
                     },
                     onError: (message) => {
+                        const text =
+                            message ||
+                            "Sorry, I couldn't get a response. Please try again.";
+                        if (
+                            isGuest &&
+                            /signup_required|sign up to save/i.test(text)
+                        ) {
+                            Alert.alert(t('auth.signupRequired'), undefined, [
+                                { text: t('common.cancel'), style: 'cancel' },
+                                {
+                                    text: t('auth.guestBannerCta'),
+                                    onPress: () =>
+                                        navigation.navigate('SaveKitchen' as never),
+                                },
+                            ]);
+                        }
                         settleStreaming((entry) => ({
                             ...entry,
                             type: 'error',
-                            content:
-                                message ||
-                                "Sorry, I couldn't get a response. Please try again.",
+                            content: text,
                             streaming: false,
                             statusText: undefined,
                         }));
@@ -505,6 +530,27 @@ export default function AICookingAssistantScreen() {
                 );
             }
         }
+    };
+
+    const handleSend = async () => {
+        if (!input.trim() || isTyping || pendingApproval) return;
+        await sendChatMessage(input.trim());
+    };
+
+    const handleDefineUnit = async (action: DefineUnitAction, ratio: number) => {
+        if (!(ratio > 0) || isTyping || pendingApproval) return;
+        const saved = await unitConversionsApi.upsert({
+            itemName: action.item,
+            baseUnit: action.from_unit,
+            targetUnit: action.to_unit,
+            ratio,
+        });
+        if (!saved) {
+            Alert.alert(t('settings.savePrefsError'));
+            return;
+        }
+        const context = `[context] User defined unit conversion: 1 ${action.from_unit} ${action.item} = ${ratio} ${action.to_unit}. Re-run suggestMealsFromPantry and update cookability.`;
+        await sendChatMessage(context, { hidden: true });
     };
 
     const handleResume = async (
@@ -616,6 +662,8 @@ export default function AICookingAssistantScreen() {
             approvalBusy={isTyping}
             onApprove={() => void handleResume('approve')}
             onReject={() => void handleResume('reject')}
+            onDefineUnit={handleDefineUnit}
+            defineUnitBusy={isTyping}
         />
     ), [
         addingToMenuRecipeId,
@@ -627,6 +675,7 @@ export default function AICookingAssistantScreen() {
         pendingApproval,
         isTyping,
         handleResume,
+        handleDefineUnit,
     ]);
 
     return (
@@ -644,6 +693,21 @@ export default function AICookingAssistantScreen() {
                 }}
                 onLayoutHeight={setHeaderHeight}
             />
+
+            {isGuest ? (
+                <TouchableOpacity
+                    onPress={() => navigation.navigate('SaveKitchen' as never)}
+                    className="mx-4 mt-2 mb-1 rounded-lg border border-herb/30 bg-sage/50 px-3 py-2"
+                    activeOpacity={0.85}
+                >
+                    <Text className="text-xs text-ink text-center">
+                        {t('auth.guestBanner')}{' '}
+                        <Text className="font-semibold text-herb">
+                            {t('auth.guestBannerCta')}
+                        </Text>
+                    </Text>
+                </TouchableOpacity>
+            ) : null}
 
             <KeyboardAvoidingView
                 behavior="padding"

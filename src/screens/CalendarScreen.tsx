@@ -685,6 +685,13 @@ export default function CalendarScreen() {
                         {/* Recipe Search / Select */}
                         <Text className="text-ink font-medium mb-2">Recipe</Text>
                         <View className="relative mb-6">
+                            <View
+                                testID="calendar-recipe-search-icon-wrap"
+                                className="absolute left-3 top-3 z-10"
+                                pointerEvents="none"
+                            >
+                                <Search size={20} color={colors.muted} />
+                            </View>
                             <TextInput
                                 className="bg-linen border border-line rounded-xl pl-10 py-3 text-ink"
                                 placeholder="Search recipe..."
@@ -692,7 +699,6 @@ export default function CalendarScreen() {
                                 value={searchQuery}
                                 onChangeText={setSearchQuery}
                             />
-                            <Search size={20} color={colors.muted} className="absolute left-3 top-3.5" />
                         </View>
 
                         <ScrollView className="max-h-64 mb-6">

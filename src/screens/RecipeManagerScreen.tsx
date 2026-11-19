@@ -34,6 +34,7 @@ import {
 } from 'lucide-react-native';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
+import { imageUploadApi } from '../api/imageUpload';
 import AppHeader from '../components/AppHeader';
 import { QuantityLabel } from '../components/UnitSelect';
 import type { MeasurementSystem } from '../utils/units';
@@ -93,6 +94,7 @@ export default function RecipeManagerScreen() {
     const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [uploadingImage, setUploadingImage] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     // ========================================================================
@@ -490,13 +492,52 @@ export default function RecipeManagerScreen() {
     }, [deleteRecipe]);
 
     // ========================================================================
-    // IMAGE PICKER HANDLERS
+    // IMAGE PICKER HANDLERS (upload to R2 — never persist file://)
     // ========================================================================
 
-    /**
-     * Pick image from gallery
-     */
+    const currentImagePublicId = (): string => {
+        if (isEditing && selectedRecipe?.image?.public_id) {
+            return selectedRecipe.image.public_id;
+        }
+        return newRecipe.image?.public_id ?? '';
+    };
+
+    const applyUploadedImage = (imageData: { url: string; public_id: string }) => {
+        if (isEditing && selectedRecipe) {
+            setSelectedRecipe((prev) => (prev ? { ...prev, image: imageData } : prev));
+        } else {
+            setNewRecipe((prev) => ({ ...prev, image: imageData }));
+        }
+    };
+
+    const uploadPickedUri = async (uri: string) => {
+        const previousPublicId = currentImagePublicId();
+        setUploadingImage(true);
+        try {
+            const res = await imageUploadApi.upload(uri);
+            if (!res.success || !res.data?.image_url) {
+                Alert.alert(
+                    'Upload failed',
+                    res.message || 'Could not upload image. Please try again.',
+                );
+                return;
+            }
+            applyUploadedImage({
+                url: res.data.image_url,
+                public_id: res.data.public_id || '',
+            });
+            if (previousPublicId && previousPublicId !== res.data.public_id) {
+                void imageUploadApi.delete(previousPublicId);
+            }
+        } catch {
+            Alert.alert('Upload failed', 'Could not upload image. Please try again.');
+        } finally {
+            setUploadingImage(false);
+        }
+    };
+
     const pickImage = async () => {
+        if (uploadingImage) return;
         const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!permission.granted) {
             Alert.alert('Permission Required', 'Please allow access to your photo library.');
@@ -510,20 +551,13 @@ export default function RecipeManagerScreen() {
             quality: 0.8,
         });
 
-        if (!result.canceled && result.assets[0]) {
-            const imageData = { public_id: '', url: result.assets[0].uri };
-            if (isEditing && selectedRecipe) {
-                setSelectedRecipe((prev) => (prev ? { ...prev, image: imageData } : prev));
-            } else {
-                setNewRecipe((prev) => ({ ...prev, image: imageData }));
-            }
+        if (!result.canceled && result.assets[0]?.uri) {
+            await uploadPickedUri(result.assets[0].uri);
         }
     };
 
-    /**
-     * Take photo with camera
-     */
     const takePhoto = async () => {
+        if (uploadingImage) return;
         const permission = await ImagePicker.requestCameraPermissionsAsync();
         if (!permission.granted) {
             Alert.alert('Permission Required', 'Please allow access to your camera.');
@@ -536,24 +570,24 @@ export default function RecipeManagerScreen() {
             quality: 0.8,
         });
 
-        if (!result.canceled && result.assets[0]) {
-            const imageData = { public_id: '', url: result.assets[0].uri };
-            if (isEditing && selectedRecipe) {
-                setSelectedRecipe((prev) => (prev ? { ...prev, image: imageData } : prev));
-            } else {
-                setNewRecipe((prev) => ({ ...prev, image: imageData }));
-            }
+        if (!result.canceled && result.assets[0]?.uri) {
+            await uploadPickedUri(result.assets[0].uri);
         }
     };
 
-    /**
-     * Remove uploaded image
-     */
-    const removeImage = () => {
+    const removeImage = async () => {
+        const publicId = currentImagePublicId();
         if (isEditing && selectedRecipe) {
             setSelectedRecipe((prev) => (prev ? { ...prev, image: null } : prev));
         } else {
             setNewRecipe((prev) => ({ ...prev, image: null }));
+        }
+        if (publicId) {
+            try {
+                await imageUploadApi.delete(publicId);
+            } catch {
+                // Best-effort delete; form already cleared
+            }
         }
     };
 
@@ -888,6 +922,52 @@ export default function RecipeManagerScreen() {
                                         )
                                     )}
 
+                                    <Text className="text-ink mb-2">Recipe Image</Text>
+                                    {uploadingImage ? (
+                                        <View className="mb-4 py-8 items-center bg-linen rounded-xl border border-line">
+                                            <ActivityIndicator color={colors.herb} />
+                                            <Text className="text-muted mt-2">Uploading…</Text>
+                                        </View>
+                                    ) : selectedRecipe.image?.url ? (
+                                        <View className="relative mb-4">
+                                            <CachedImage
+                                                uri={selectedRecipe.image.url}
+                                                className="w-full h-48 rounded-xl"
+                                                style={{ width: '100%', height: 192, borderRadius: 12 }}
+                                                contentFit="cover"
+                                            />
+                                            <TouchableOpacity
+                                                onPress={() => {
+                                                    void removeImage();
+                                                }}
+                                                className="absolute top-2 right-2 bg-black/50 p-2 rounded-full"
+                                            >
+                                                <XIcon size={16} color={colors.onHerb} />
+                                            </TouchableOpacity>
+                                        </View>
+                                    ) : (
+                                        <View className="flex-row gap-3 mb-4">
+                                            <TouchableOpacity
+                                                onPress={() => {
+                                                    void takePhoto();
+                                                }}
+                                                className="flex-1 flex-row items-center justify-center py-3 bg-linen rounded-xl border border-dashed border-line"
+                                            >
+                                                <CameraIcon size={20} color={colors.muted} />
+                                                <Text className="text-muted ml-2">Camera</Text>
+                                            </TouchableOpacity>
+                                            <TouchableOpacity
+                                                onPress={() => {
+                                                    void pickImage();
+                                                }}
+                                                className="flex-1 flex-row items-center justify-center py-3 bg-linen rounded-xl border border-dashed border-line"
+                                            >
+                                                <ImageIcon size={20} color={colors.muted} />
+                                                <Text className="text-muted ml-2">Gallery</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    )}
+
                                     <Text className="text-ink mb-2">Instructions / Steps</Text>
                                     <TextInput
                                         value={getInstructionsText()}
@@ -1041,7 +1121,12 @@ export default function RecipeManagerScreen() {
 
                             {/* Recipe Image */}
                             <Text className="text-ink mb-2">Recipe Image</Text>
-                            {newRecipe.image?.url ? (
+                            {uploadingImage ? (
+                                <View className="mb-4 py-8 items-center bg-linen rounded-xl border border-line">
+                                    <ActivityIndicator color={colors.herb} />
+                                    <Text className="text-muted mt-2">Uploading…</Text>
+                                </View>
+                            ) : newRecipe.image?.url ? (
                                 <View className="relative mb-4">
                                     <CachedImage
                                         uri={newRecipe.image.url}
@@ -1050,7 +1135,9 @@ export default function RecipeManagerScreen() {
                                         contentFit="cover"
                                     />
                                     <TouchableOpacity
-                                        onPress={removeImage}
+                                        onPress={() => {
+                                            void removeImage();
+                                        }}
                                         className="absolute top-2 right-2 bg-black/50 p-2 rounded-full"
                                     >
                                         <XIcon size={16} color={colors.onHerb} />
@@ -1059,14 +1146,18 @@ export default function RecipeManagerScreen() {
                             ) : (
                                 <View className="flex-row gap-3 mb-4">
                                     <TouchableOpacity
-                                        onPress={takePhoto}
+                                        onPress={() => {
+                                            void takePhoto();
+                                        }}
                                         className="flex-1 flex-row items-center justify-center py-3 bg-linen rounded-xl border border-dashed border-line"
                                     >
                                         <CameraIcon size={20} color={colors.muted} />
                                         <Text className="text-muted ml-2">Camera</Text>
                                     </TouchableOpacity>
                                     <TouchableOpacity
-                                        onPress={pickImage}
+                                        onPress={() => {
+                                            void pickImage();
+                                        }}
                                         className="flex-1 flex-row items-center justify-center py-3 bg-linen rounded-xl border border-dashed border-line"
                                     >
                                         <ImageIcon size={20} color={colors.muted} />

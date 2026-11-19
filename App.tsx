@@ -128,6 +128,11 @@ function MainDrawer() {
         getComponent={() => require('./src/screens/PantryImageReviewScreen').default}
         options={{ title: t('pantryVision.reviewTitle'), drawerItemStyle: { display: 'none' } }}
       />
+      <Drawer.Screen
+        name="SaveKitchen"
+        getComponent={() => require('./src/screens/SignUpScreen').default}
+        options={{ title: t('auth.guestBannerCta'), drawerItemStyle: { display: 'none' } }}
+      />
     </Drawer.Navigator>
   );
 }
