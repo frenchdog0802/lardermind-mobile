@@ -3,6 +3,7 @@
  */
 
 import request from './client';
+import type { ApiResponse } from '../types';
 
 export interface UsageSummary {
     aiMessagesUsed: number;
@@ -22,49 +23,54 @@ export interface SubscriptionStatus {
     expiresAt?: number;
     productId?: string;
     planName?: string;
+    /** Which billing source currently grants Pro. Informational only; never shown to users. */
+    source?: 'apple' | 'stripe';
     usage: UsageSummary;
 }
 
-export interface ReceiptValidationRequest {
-    platform: 'ios' | 'android';
+export interface IosPurchaseSyncRequest {
+    /** StoreKit 2 signed transaction (JWS) — `purchaseToken` on iOS in react-native-iap. */
     receipt: string;
     productId: string;
 }
 
-export interface ReceiptValidationResponse {
-    valid: boolean;
-    expiresAt?: number;
-    productId?: string;
+export class SubscriptionApiError extends Error {
+    statusCode?: number;
+    constructor(message: string, statusCode?: number) {
+        super(message);
+        this.name = 'SubscriptionApiError';
+        this.statusCode = statusCode;
+    }
 }
 
-function unwrap<T>(response: { success: boolean; message?: string; data?: T }): T {
+function unwrap<T>(response: ApiResponse<T>): T {
     if (!response.success || response.data === undefined) {
-        throw new Error(response.message ?? 'Subscription request failed');
+        throw new SubscriptionApiError(
+            response.message ?? 'Subscription request failed',
+            response.statusCode,
+        );
     }
     return response.data;
 }
 
 export const subscriptionApi = {
-    validateReceipt: (data: ReceiptValidationRequest) =>
-        request<ReceiptValidationResponse>('subscription/validate-receipt', {
-            method: 'POST',
-            body: JSON.stringify(data),
-        }),
-
     getStatus: async (): Promise<SubscriptionStatus> => {
         const response = await request<SubscriptionStatus>('subscription/status');
         return unwrap(response);
     },
 
-    syncPurchase: async (data: { productId: string; transactionId: string; platform: string }) => {
+    /**
+     * Send a verified-by-Apple signed transaction to the backend, which validates the JWS
+     * and grants Pro. Resolves with the fresh subscription status.
+     */
+    syncIosPurchase: async (data: IosPurchaseSyncRequest): Promise<SubscriptionStatus> => {
         const response = await request<{ success: boolean; status: SubscriptionStatus }>(
             'subscription/sync',
             {
                 method: 'POST',
-                body: JSON.stringify(data),
+                body: JSON.stringify({ platform: 'ios', ...data }),
             },
         );
-        const payload = unwrap(response);
-        return payload;
+        return unwrap(response).status;
     },
 };

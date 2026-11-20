@@ -34,6 +34,7 @@ import { colors } from './src/theme/tokens';
 import { AuthProvider, useAuth } from './src/contexts/authContext';
 import { PantryProvider } from './src/contexts/pantryContext';
 import { initI18n } from './src/i18n';
+import { initializeIAP, disconnectIAP } from './src/services/iapService';
 
 const Stack = createStackNavigator();
 const Drawer = createDrawerNavigator();
@@ -46,6 +47,25 @@ function AuthCheck({ children }: { children: React.ReactNode }) {
   }
 
   return <>{children}</>;
+}
+
+/**
+ * Opens the StoreKit connection once a real (non-guest) user is signed in. Connecting makes StoreKit
+ * re-deliver any unfinished transaction (e.g. a purchase interrupted before the backend confirmed it),
+ * and the auth token is needed to confirm it. Guests cannot subscribe, so no connection is opened.
+ */
+function IapBootstrap() {
+  const { isAuthenticated, isGuest } = useAuth();
+
+  useEffect(() => {
+    if (!isAuthenticated || isGuest) return;
+    void initializeIAP();
+    return () => {
+      void disconnectIAP();
+    };
+  }, [isAuthenticated, isGuest]);
+
+  return null;
 }
 
 function RootNavigator() {
@@ -177,6 +197,7 @@ function App() {
             <NavigationContainer>
               <StatusBar style="dark" />
               <AuthCheck>
+                <IapBootstrap />
                 <RootNavigator />
               </AuthCheck>
             </NavigationContainer>
