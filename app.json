@@ -17,6 +17,7 @@
       "supportsTablet": true,
       "requireFullScreen": true,
       "bundleIdentifier": "com.lardermind.app",
+      "buildNumber": "4",
       "appleTeamId": "535UF7UZS4",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
