@@ -116,6 +116,9 @@ export default function SubscriptionScreen() {
                     <FeatureRow text={t('paywall.featureImports')} />
                     <FeatureRow text={t('paywall.featureUnlimited')} />
                 </View>
+                <Text className="text-muted text-center text-xs mb-6 -mt-3">
+                    {t('paywall.freePlanNote')}
+                </Text>
 
                 {!iapSupported ? (
                     <Text className="text-muted text-center py-6" testID="iap-unsupported">

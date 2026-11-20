@@ -5,9 +5,20 @@
 import request from './client';
 import type { ApiResponse } from '../types';
 
+export type AiMessagesPeriod = 'day' | 'week';
+
+/** Period the AI message quota is counted over; signed-in users default to 'week'. */
+export function aiMessagesPeriod(usage: Pick<UsageSummary, 'aiMessagesPeriod'>): AiMessagesPeriod {
+    return usage.aiMessagesPeriod === 'day' ? 'day' : 'week';
+}
+
 export interface UsageSummary {
     aiMessagesUsed: number;
     aiMessagesLimit: number;
+    /** 'week' = ISO week (Mon 00:00 UTC) for signed-in users. Absent on older backends. */
+    aiMessagesPeriod?: AiMessagesPeriod;
+    /** Unix seconds (UTC) when the AI message counter resets. */
+    aiMessagesResetsAt?: number;
     recipeImportsUsed: number;
     recipeImportsLimit: number;
     recipeCount: number;
