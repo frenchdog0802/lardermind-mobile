@@ -394,7 +394,8 @@
   "paywall": {
     "title": "LarderMind Pro",
     "subtitle": "Plan smarter with a higher-volume AI kitchen assistant.",
-    "featureAi": "150 AI messages per day",
+    "featureAi": "300 AI messages per week",
+    "freePlanNote": "Free plan: 50 AI messages per week.",
     "featureImports": "50 recipe imports per month",
     "featureUnlimited": "Unlimited recipes and photo uploads",
     "pricePerPeriod": "{{price}} / {{period}}",

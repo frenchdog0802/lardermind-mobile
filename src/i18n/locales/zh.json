@@ -394,7 +394,8 @@
   "paywall": {
     "title": "LarderMind Pro",
     "subtitle": "用更高額度的 AI 廚房助理，聰明規劃每一餐。",
-    "featureAi": "每日 150 則 AI 訊息",
+    "featureAi": "每週 300 則 AI 訊息",
+    "freePlanNote": "免費方案：每週 50 則 AI 訊息。",
     "featureImports": "每月 50 次食譜匯入",
     "featureUnlimited": "不限數量的食譜與照片上傳",
     "pricePerPeriod": "{{price}} / {{period}}",
