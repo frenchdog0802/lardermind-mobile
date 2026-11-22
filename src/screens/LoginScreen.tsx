@@ -5,8 +5,9 @@ import { ChefHat } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/authContext';
 import { useNavigation } from '@react-navigation/native';
-import { PrimaryButton, GoogleSignInButton, TextField } from '../components/ui';
+import { PrimaryButton, GoogleSignInButton, AppleSignInButton, TextField } from '../components/ui';
 import { colors } from '../theme/tokens';
+import { isGoogleSignInSupported } from '../services/googleSignIn';
 
 interface LoginProps {
   onLoginSuccess?: () => void;
@@ -21,8 +22,9 @@ export default function LoginScreen({ onLoginSuccess, onSignUp }: LoginProps = {
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
 
-  const { login, loginWithGoogle, continueAsGuest, submitting } = useAuth();
-  const showGoogle = Platform.OS === 'android';
+  const { login, loginWithGoogle, loginWithApple, continueAsGuest, submitting } = useAuth();
+  const showGoogle = isGoogleSignInSupported();
+  const showApple = Platform.OS === 'ios';
 
   const handleTryGuest = async () => {
     setError('');
@@ -71,6 +73,22 @@ export default function LoginScreen({ onLoginSuccess, onSignUp }: LoginProps = {
       }
     } catch {
       setError(t('auth.googleRetry'));
+    }
+  };
+
+  const handleApple = async () => {
+    setError('');
+    try {
+      const result = await loginWithApple();
+      if (result.success) {
+        onLoginSuccess?.();
+        return;
+      }
+      // Dismissing the Apple sheet is a normal choice, not an error.
+      if (result.message === 'cancelled') return;
+      setError(result.message || t('auth.appleRetry'));
+    } catch {
+      setError(t('auth.appleRetry'));
     }
   };
 
@@ -159,22 +177,32 @@ export default function LoginScreen({ onLoginSuccess, onSignUp }: LoginProps = {
               testID="login-submit"
             />
 
-            {showGoogle ? (
-              <>
-                <View className="flex-row items-center mb-6">
-                  <View className="flex-1 h-px bg-line" />
-                  <Text className="mx-3 text-sm text-muted">{t('common.or')}</Text>
-                  <View className="flex-1 h-px bg-line" />
-                </View>
-                <GoogleSignInButton
-                  label={t('auth.signInGoogle')}
-                  onPress={handleGoogle}
-                  disabled={submitting}
-                  className="mb-6"
-                  testID="login-google"
-                />
-              </>
+            {showApple || showGoogle ? (
+              <View className="flex-row items-center mb-6">
+                <View className="flex-1 h-px bg-line" />
+                <Text className="mx-3 text-sm text-muted">{t('common.or')}</Text>
+                <View className="flex-1 h-px bg-line" />
+              </View>
             ) : null}
+            {showApple ? (
+              <AppleSignInButton
+                variant="sign-in"
+                onPress={handleApple}
+                disabled={submitting}
+                className="mb-3"
+                testID="login-apple"
+              />
+            ) : null}
+            {showGoogle ? (
+              <GoogleSignInButton
+                label={t('auth.signInGoogle')}
+                onPress={handleGoogle}
+                disabled={submitting}
+                className="mb-6"
+                testID="login-google"
+              />
+            ) : null}
+            {showApple && !showGoogle ? <View className="mb-3" /> : null}
 
             <TouchableOpacity
               onPress={() => void handleTryGuest()}

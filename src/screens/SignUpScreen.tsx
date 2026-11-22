@@ -6,13 +6,14 @@ import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../contexts/authContext';
 import { User } from '../types';
-import { PrimaryButton, GoogleSignInButton, TextField } from '../components/ui';
+import { PrimaryButton, GoogleSignInButton, AppleSignInButton, TextField } from '../components/ui';
 import { colors } from '../theme/tokens';
+import { isGoogleSignInSupported } from '../services/googleSignIn';
 
 export default function SignUpScreen() {
   const { t } = useTranslation();
   const navigation = useNavigation();
-  const { signUp, loginWithGoogle, submitting } = useAuth();
+  const { signUp, loginWithGoogle, loginWithApple, submitting } = useAuth();
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -20,7 +21,8 @@ export default function SignUpScreen() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
-  const showGoogle = Platform.OS === 'android';
+  const showGoogle = isGoogleSignInSupported();
+  const showApple = Platform.OS === 'ios';
 
   const handleSubmit = async () => {
     if (!firstName || !lastName || !email || !password) {
@@ -80,6 +82,24 @@ export default function SignUpScreen() {
       }
     } catch {
       setError(t('auth.googleSignUpRetry'));
+    }
+  };
+
+  const handleApple = async () => {
+    setError('');
+    try {
+      const result = await loginWithApple();
+      if (result.success) {
+        if (navigation.getState()?.routeNames?.includes('Chat')) {
+          navigation.navigate('Chat' as never);
+        }
+        return;
+      }
+      // Dismissing the Apple sheet is a normal choice, not an error.
+      if (result.message === 'cancelled') return;
+      setError(result.message || t('auth.appleRetry'));
+    } catch {
+      setError(t('auth.appleRetry'));
     }
   };
 
@@ -174,22 +194,32 @@ export default function SignUpScreen() {
                 className="mb-6"
               />
 
-              {showGoogle ? (
-                <>
-                  <View className="flex-row items-center mb-6">
-                    <View className="flex-1 h-px bg-line" />
-                    <Text className="mx-3 text-sm text-muted">{t('common.or')}</Text>
-                    <View className="flex-1 h-px bg-line" />
-                  </View>
-                  <GoogleSignInButton
-                    label={t('auth.signUpGoogle')}
-                    onPress={handleGoogle}
-                    disabled={submitting}
-                    className="mb-6"
-                    testID="signup-google"
-                  />
-                </>
+              {showApple || showGoogle ? (
+                <View className="flex-row items-center mb-6">
+                  <View className="flex-1 h-px bg-line" />
+                  <Text className="mx-3 text-sm text-muted">{t('common.or')}</Text>
+                  <View className="flex-1 h-px bg-line" />
+                </View>
               ) : null}
+              {showApple ? (
+                <AppleSignInButton
+                  variant="sign-up"
+                  onPress={handleApple}
+                  disabled={submitting}
+                  className="mb-3"
+                  testID="signup-apple"
+                />
+              ) : null}
+              {showGoogle ? (
+                <GoogleSignInButton
+                  label={t('auth.signUpGoogle')}
+                  onPress={handleGoogle}
+                  disabled={submitting}
+                  className="mb-6"
+                  testID="signup-google"
+                />
+              ) : null}
+              {showApple && !showGoogle ? <View className="mb-3" /> : null}
 
               <View className="items-center">
                 <Text className="text-sm text-muted">

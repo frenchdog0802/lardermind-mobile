@@ -1,5 +1,5 @@
 /**
- * Login / SignUp screen smoke tests — email + Android Google CTA
+ * Login / SignUp screen smoke tests — email, Apple (iOS), Google (Android / iOS when configured)
  */
 import React from 'react';
 import { Platform } from 'react-native';
@@ -10,12 +10,14 @@ import SignUpScreen from '../../screens/SignUpScreen';
 const mockLogin = jest.fn();
 const mockSignUp = jest.fn();
 const mockLoginWithGoogle = jest.fn();
+const mockLoginWithApple = jest.fn();
 
 jest.mock('../../contexts/authContext', () => ({
     useAuth: () => ({
         login: mockLogin,
         signUp: mockSignUp,
         loginWithGoogle: mockLoginWithGoogle,
+        loginWithApple: mockLoginWithApple,
         initializing: false,
         submitting: false,
         loading: false,
@@ -37,7 +39,7 @@ describe('LoginScreen', () => {
         Object.defineProperty(Platform, 'OS', { configurable: true, get: () => platformOS });
     });
 
-    it('shows email login UI without social SSO buttons on iOS', () => {
+    it('shows email login UI and the Apple button (no Google without an iOS client id) on iOS', () => {
         const { getByText, getByPlaceholderText, queryByText, queryByTestId } = render(
             <LoginScreen />,
         );
@@ -51,7 +53,53 @@ describe('LoginScreen', () => {
 
         expect(queryByText('Sign in with Google')).toBeNull();
         expect(queryByTestId('login-google')).toBeNull();
-        expect(queryByText('Continue with Apple')).toBeNull();
+        expect(queryByTestId('login-apple')).toBeTruthy();
+    });
+
+    it('shows both Apple and Google on iOS once the iOS Google client id is set', () => {
+        const prev = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
+        process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID = '1-abc.apps.googleusercontent.com';
+        try {
+            const { queryByTestId, toJSON } = render(<LoginScreen />);
+            expect(queryByTestId('login-apple')).toBeTruthy();
+            expect(queryByTestId('login-google')).toBeTruthy();
+            const tree = JSON.stringify(toJSON());
+            expect(tree.indexOf('login-apple')).toBeLessThan(tree.indexOf('login-google'));
+        } finally {
+            if (prev === undefined) delete process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
+            else process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID = prev;
+        }
+    });
+
+    it('calls loginWithApple and succeeds', async () => {
+        mockLoginWithApple.mockResolvedValue({ success: true });
+        const onLoginSuccess = jest.fn();
+        const { getByTestId } = render(<LoginScreen onLoginSuccess={onLoginSuccess} />);
+        fireEvent.press(getByTestId('login-apple'));
+        await waitFor(() => expect(onLoginSuccess).toHaveBeenCalled());
+        expect(mockLoginWithApple).toHaveBeenCalled();
+    });
+
+    it('treats cancelling the Apple sheet silently (no error banner)', async () => {
+        mockLoginWithApple.mockResolvedValue({ success: false, message: 'cancelled' });
+        const { getByTestId, queryByText } = render(<LoginScreen />);
+        fireEvent.press(getByTestId('login-apple'));
+        await waitFor(() => expect(mockLoginWithApple).toHaveBeenCalled());
+        expect(queryByText('cancelled')).toBeNull();
+        expect(queryByText(/failed/i)).toBeNull();
+    });
+
+    it('shows an error when Apple sign-in fails', async () => {
+        mockLoginWithApple.mockResolvedValue({ success: false, message: 'Apple boom' });
+        const { getByTestId, findByText } = render(<LoginScreen />);
+        fireEvent.press(getByTestId('login-apple'));
+        expect(await findByText('Apple boom')).toBeTruthy();
+    });
+
+    it('hides Apple on Android', () => {
+        Object.defineProperty(Platform, 'OS', { configurable: true, get: () => 'android' });
+        const { queryByTestId } = render(<LoginScreen />);
+        expect(queryByTestId('login-apple')).toBeNull();
     });
 
     it('shows Google button on Android and calls loginWithGoogle', async () => {
@@ -101,7 +149,7 @@ describe('SignUpScreen', () => {
         Object.defineProperty(Platform, 'OS', { configurable: true, get: () => platformOS });
     });
 
-    it('shows email signup UI without Google button on iOS', () => {
+    it('shows email signup UI with the Apple button and no Google button on iOS', () => {
         const { getByText, getByPlaceholderText, queryByText, queryByTestId } = render(
             <SignUpScreen />,
         );
@@ -116,7 +164,15 @@ describe('SignUpScreen', () => {
 
         expect(queryByText('Sign up with Google')).toBeNull();
         expect(queryByTestId('signup-google')).toBeNull();
-        expect(queryByText(/^or$/)).toBeNull();
+        expect(queryByTestId('signup-apple')).toBeTruthy();
+    });
+
+    it('calls loginWithApple from sign up; cancel is silent', async () => {
+        mockLoginWithApple.mockResolvedValueOnce({ success: false, message: 'cancelled' });
+        const { getByTestId, queryByText } = render(<SignUpScreen />);
+        fireEvent.press(getByTestId('signup-apple'));
+        await waitFor(() => expect(mockLoginWithApple).toHaveBeenCalledTimes(1));
+        expect(queryByText('cancelled')).toBeNull();
     });
 
     it('shows Google button on Android and calls loginWithGoogle', async () => {

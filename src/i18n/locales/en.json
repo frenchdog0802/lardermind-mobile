@@ -103,6 +103,7 @@
     "googleFailed": "Google login failed",
     "googleRetry": "Google login failed. Please try again.",
     "googleCancelled": "Google login was cancelled or failed.",
+    "appleRetry": "Apple sign-in failed. Please try again.",
     "signUpFailed": "Sign up failed",
     "passwordPlaceholder": "Password",
     "confirmPassword": "Confirm Password",

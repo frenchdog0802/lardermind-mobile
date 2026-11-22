@@ -150,6 +150,32 @@ jest.mock('@react-native-google-signin/google-signin', () => ({
     isErrorWithCode: (e) => Boolean(e && typeof e === 'object' && 'code' in e),
 }));
 
+jest.mock('expo-apple-authentication', () => {
+    const React = require('react');
+    const { Pressable, Text } = require('react-native');
+    return {
+        isAvailableAsync: jest.fn(async () => true),
+        signInAsync: jest.fn(async () => ({
+            user: 'apple-user',
+            identityToken: 'apple-identity-token',
+            authorizationCode: 'code',
+            email: null,
+            fullName: null,
+            realUserStatus: 1,
+            state: null,
+        })),
+        AppleAuthenticationScope: { FULL_NAME: 0, EMAIL: 1 },
+        AppleAuthenticationButtonType: { SIGN_IN: 0, CONTINUE: 1, SIGN_UP: 2 },
+        AppleAuthenticationButtonStyle: { WHITE: 0, WHITE_OUTLINE: 1, BLACK: 2 },
+        AppleAuthenticationButton: ({ onPress, testID, buttonType }) =>
+            React.createElement(
+                Pressable,
+                { onPress, testID, accessibilityRole: 'button' },
+                React.createElement(Text, null, buttonType === 2 ? 'Sign up with Apple' : 'Sign in with Apple'),
+            ),
+    };
+});
+
 jest.mock('react-i18next', () => ({
     useTranslation: () => ({
         t: (key, opts) => {

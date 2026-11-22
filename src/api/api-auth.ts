@@ -52,6 +52,21 @@ export const auth = {
         });
     },
 
+    /** Exchange an Apple identity token for the app JWT (Worker: POST /api/auth/apple-login). */
+    appleLogin: (
+        credential: {
+            identityToken: string;
+            fullName?: { givenName?: string; familyName?: string };
+            email?: string;
+        },
+        guestToken?: string | null,
+    ): Promise<ApiResponse<AuthData>> => {
+        return api.post<AuthData>('auth/apple-login', {
+            ...credential,
+            ...(guestToken ? { guest_token: guestToken } : {}),
+        });
+    },
+
     mintGuest: (): Promise<ApiResponse<GuestMintData>> => {
         return api.post<GuestMintData>('auth/guest', {});
     },

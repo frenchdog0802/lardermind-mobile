@@ -103,6 +103,7 @@
     "googleFailed": "Google 登入失敗",
     "googleRetry": "Google 登入失敗，請再試一次。",
     "googleCancelled": "已取消或 Google 登入失敗。",
+    "appleRetry": "Apple 登入失敗，請再試一次。",
     "signUpFailed": "註冊失敗",
     "passwordPlaceholder": "密碼",
     "confirmPassword": "確認密碼",

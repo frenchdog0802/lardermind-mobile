@@ -1,6 +1,9 @@
 /**
- * Native Google Sign-In (Android). Requires a development build — not Expo Go.
+ * Native Google Sign-In (Android + iOS). Requires a development build — not Expo Go.
+ * iOS additionally needs EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID (iOS OAuth client for bundle
+ * com.lardermind.app); app.config.js derives the URL scheme from it at prebuild time.
  */
+import { Platform } from 'react-native';
 import {
   GoogleSignin,
   isCancelledResponse,
@@ -23,6 +26,17 @@ export class GoogleSignInError extends Error {
 
 let configured = false;
 
+function iosClientId(): string {
+  return (process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? '').trim();
+}
+
+/** Google sign-in works on Android always, and on iOS only once an iOS client id is configured. */
+export function isGoogleSignInSupported(): boolean {
+  if (Platform.OS === 'android') return true;
+  if (Platform.OS === 'ios') return iosClientId().length > 0;
+  return false;
+}
+
 export function configureGoogleSignIn(): void {
   if (configured) return;
 
@@ -36,8 +50,10 @@ export function configureGoogleSignIn(): void {
     return;
   }
 
+  const iosId = iosClientId();
   GoogleSignin.configure({
     webClientId,
+    ...(Platform.OS === 'ios' && iosId ? { iosClientId: iosId } : {}),
     offlineAccess: false,
   });
   configured = true;
@@ -53,9 +69,14 @@ export async function signInForIdToken(): Promise<string> {
   if (!webClientId) {
     throw new GoogleSignInError('not_configured', 'Google Sign-In is not configured');
   }
+  if (Platform.OS === 'ios' && !iosClientId()) {
+    throw new GoogleSignInError('not_configured', 'Google Sign-In is not configured for iOS');
+  }
 
   try {
-    await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+    if (Platform.OS === 'android') {
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+    }
     const response = await GoogleSignin.signIn();
 
     if (isCancelledResponse(response)) {
