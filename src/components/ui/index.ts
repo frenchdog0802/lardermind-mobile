@@ -1,6 +1,7 @@
 export { PrimaryButton } from './PrimaryButton';
 export { SecondaryButton } from './SecondaryButton';
 export { GoogleSignInButton } from './GoogleSignInButton';
+export { AppleSignInButton } from './AppleSignInButton';
 export { TextField } from './TextField';
 export { PageTitle } from './PageTitle';
 export { PageSubtitle } from './PageSubtitle';

@@ -5,6 +5,7 @@ import { authHelper, isJwtExpired } from '../api/auth-helper';
 import { setUnauthorizedHandler } from '../api/client';
 import { User } from '../types';
 import { GoogleSignInError, signInForIdToken } from '../services/googleSignIn';
+import { AppleSignInError, signInWithApple } from '../services/appleSignIn';
 
 import { clearUserOfflineData, clearBackoff } from '../services/shoppingListOffline';
 
@@ -26,6 +27,8 @@ interface AuthContextType {
     signUp: (user: User, password: string) => Promise<AuthResponse>;
     login: (email: string, password: string) => Promise<AuthResponse>;
     loginWithGoogle: () => Promise<AuthResponse>;
+    /** message === 'cancelled' when the person dismissed the Apple sheet. */
+    loginWithApple: () => Promise<AuthResponse>;
     continueAsGuest: () => Promise<AuthResponse>;
     logout: () => Promise<void>;
     /** Permanently deletes the account on the server, then clears session + offline data. */
@@ -260,6 +263,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return authResponse;
     };
 
+    const loginWithApple = async (): Promise<AuthResponse> => {
+        setSubmitting(true);
+        const authResponse: AuthResponse = { success: false };
+
+        try {
+            const credential = await signInWithApple();
+            const guestToken = await takeGuestTokenIfPresent();
+            if (__DEV__) {
+                console.log('[auth] apple login start');
+            }
+            const response = await auth.appleLogin(credential, guestToken);
+            if (__DEV__) {
+                console.log('[auth] apple login response', response?.success, response?.message);
+            }
+
+            if (response && response.success && response.data) {
+                await persistSession(response.data.token, {
+                    ...response.data.user,
+                    is_guest: false,
+                });
+                authResponse.success = true;
+            } else {
+                authResponse.success = false;
+                authResponse.message = response.message || 'Apple login failed';
+            }
+        } catch (error) {
+            if (error instanceof AppleSignInError && error.code === 'cancelled') {
+                authResponse.message = 'cancelled';
+            } else if (error instanceof AppleSignInError) {
+                console.error('Apple sign-in error:', error.code, error.message);
+                authResponse.message = error.message;
+            } else {
+                console.error('Error during Apple login:', error);
+                authResponse.message = 'An error occurred during Apple login';
+            }
+        } finally {
+            setSubmitting(false);
+        }
+
+        return authResponse;
+    };
+
     const continueAsGuest = async (): Promise<AuthResponse> => {
         setSubmitting(true);
         const authResponse: AuthResponse = { success: false };
@@ -298,6 +343,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             loading: initializing,
             login,
             loginWithGoogle,
+            loginWithApple,
             continueAsGuest,
             logout,
             deleteAccount,

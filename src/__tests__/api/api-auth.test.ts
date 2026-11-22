@@ -92,6 +92,27 @@ describe('auth API', () => {
         });
     });
 
+    describe('appleLogin', () => {
+        it('should POST to /auth/apple-login with token, name, email and guest token', async () => {
+            mockedApi.post.mockResolvedValue({
+                success: true,
+                data: { user: { id: '1', name: 'A', email: 'a@test.com' }, token: 'jwt' },
+            });
+
+            await auth.appleLogin(
+                { identityToken: 'apple-token', fullName: { givenName: 'Ann' }, email: 'a@test.com' },
+                'guest-jwt',
+            );
+
+            expect(mockedApi.post).toHaveBeenCalledWith('auth/apple-login', {
+                identityToken: 'apple-token',
+                fullName: { givenName: 'Ann' },
+                email: 'a@test.com',
+                guest_token: 'guest-jwt',
+            });
+        });
+    });
+
     describe('googleLogin', () => {
         it('should POST to /auth/google-login with Google ID token', async () => {
             mockedApi.post.mockResolvedValue({
